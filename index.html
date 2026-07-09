@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SMOS · 온보딩 현황</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  :root{
+    --bg:#F2F6FF; --surface:#FFFFFF; --surface-2:#F7F9FE;
+    --border:#D6E2F8; --border-strong:#B4CCF8;
+    --ink:#1A1D29; --ink-2:#3D5080; --muted:#8A95B5;
+    --accent:#3176FD; --accent-2:#0746CA; --accent-tint:#F2F6FF;
+    --radius:14px; --radius-sm:10px;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --shadow:0 1px 2px rgba(18,38,102,.04), 0 4px 16px rgba(18,38,102,.06);
+    --shadow-lg:0 12px 40px rgba(26,29,41,.18);
+    --s-recv-t:#0C3698; --s-recv-b:#F2F6FF; --s-recv-d:#6196FD;
+    --s-rev-t:#8A5A08;  --s-rev-b:#FFF8E1;  --s-rev-d:#D99A0B;
+    --s-vaw-t:#B0450D;  --s-vaw-b:#FCEBDF;  --s-vaw-d:#EA6A1C;
+    --s-vac-t:#0746CA;  --s-vac-b:#C8DBFC;  --s-vac-d:#3176FD;
+    --s-live-t:#063D2B; --s-live-b:#C9F7E1; --s-live-d:#00C592;
+    --s-rej-t:#B42318;  --s-rej-b:#FCEBEA;  --s-rej-d:#E5533F;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; line-height:1.45;
+    overflow-x:hidden; -webkit-tap-highlight-color:transparent;}
+  .wrap{max-width:620px; margin:0 auto; min-height:100%; display:flex; flex-direction:column;}
+
+  header{position:sticky; top:0; z-index:20;
+    background:rgba(242,246,255,.88); backdrop-filter:saturate(180%) blur(12px); -webkit-backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--border); padding:calc(env(safe-area-inset-top) + 13px) 16px 0;}
+  .brand{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .brand-l{display:flex; flex-direction:column; gap:1px; min-width:0;}
+  .brand-title{font-size:19px; font-weight:750; letter-spacing:-.02em; display:flex; align-items:center; gap:8px;}
+  .brand-mark{font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.08em; color:var(--accent); background:var(--accent-tint); padding:3px 7px; border-radius:6px;}
+  .brand-sub{font-size:11.5px; color:var(--muted); font-family:var(--mono);}
+  .sync{display:inline-flex; align-items:center; gap:6px; cursor:pointer;}
+  .sync .sdot{width:7px; height:7px; border-radius:50%; background:var(--muted); flex:none;}
+  .sync.live{color:var(--s-live-t);}
+  .sync.live .sdot{background:var(--s-live-d); animation:pulse 2s infinite;}
+  .sync.off{color:var(--s-rej-t);}
+  .sync.off .sdot{background:var(--s-rej-d);}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(0,197,146,.5)}70%{box-shadow:0 0 0 6px rgba(0,197,146,0)}100%{box-shadow:0 0 0 0 rgba(0,197,146,0)}}
+  .lang-toggle{display:inline-flex; background:var(--surface); border:1px solid var(--border-strong); border-radius:9px; padding:3px; gap:2px; flex:none;}
+  .lang-toggle button{border:0; background:transparent; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink-2); padding:5px 11px; border-radius:6px; cursor:pointer; transition:all .15s;}
+  .lang-toggle button.on{background:var(--ink); color:#fff;}
+
+  .tabs{display:flex; gap:4px; margin-top:13px; background:var(--surface); border:1px solid var(--border-strong); border-radius:11px; padding:3px;}
+  .tabs button{flex:1; border:0; background:transparent; font:inherit; font-size:13.5px; font-weight:650; color:var(--ink-2); padding:9px; border-radius:8px; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:7px;}
+  .tabs button .tcnt{font-family:var(--mono); font-size:11px; font-weight:700; opacity:.6;}
+  .tabs button.on{background:var(--ink); color:#fff;}
+
+  .search{margin-top:11px; position:relative;}
+  .search svg{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted);}
+  .search input{width:100%; height:44px; border:1px solid var(--border-strong); background:var(--surface); border-radius:11px; padding:0 14px 0 38px; font:inherit; font-size:16px; color:var(--ink); outline:none; transition:border-color .15s, box-shadow .15s;}
+  .search input::placeholder{color:var(--muted);}
+  .search input:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint);}
+
+  .chips{display:flex; gap:7px; overflow-x:auto; padding:11px 0 12px; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-2); font:inherit; font-size:12.5px; font-weight:600; padding:6px 11px; border-radius:999px; cursor:pointer; transition:all .15s; white-space:nowrap;}
+  .chip .cnt{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted);}
+  .chip .dot{width:7px; height:7px; border-radius:50%;}
+  .chip.on{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .chip.on .cnt{color:rgba(255,255,255,.7)}
+
+  .toolbar{display:flex; flex-wrap:wrap; gap:7px; padding:0 0 12px;}
+  .toolbar button{border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-2); font:inherit; font-size:12px; font-weight:600; padding:6px 11px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s;}
+  .toolbar button:hover{background:var(--surface-2); border-color:var(--accent); color:var(--accent);}
+  .toolbar button.sort-on{background:var(--accent-tint); border-color:var(--accent); color:var(--accent);}
+
+  main{flex:1; padding:14px 16px calc(env(safe-area-inset-bottom) + 24px);}
+  .group{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:11px; box-shadow:var(--shadow); overflow:hidden;}
+  .group-head{display:flex; align-items:center; gap:11px; padding:13px 15px; cursor:pointer; user-select:none; transition:background .12s;}
+  .group-head:hover{background:var(--surface-2);}
+  .group-head:active{background:#F1F3F6;}
+  .chev{flex:none; color:var(--muted); transition:transform .22s cubic-bezier(.3,.7,.3,1);}
+  .group.open .chev{transform:rotate(90deg);}
+  .group-name{font-size:15px; font-weight:700; letter-spacing:-.01em; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .group-meta{display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex:none;}
+  .ratio{display:flex; align-items:center; gap:7px;}
+  .ratio-bar{width:52px; height:5px; border-radius:3px; background:var(--s-rej-b); overflow:hidden;}
+  .ratio-bar i{display:block; height:100%; background:var(--s-live-d); border-radius:3px;}
+  .ratio-txt{font-family:var(--mono); font-size:11px; font-weight:600; color:var(--muted);}
+  .attn-cnt{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--s-vaw-t); background:var(--s-vaw-b); padding:1px 6px; border-radius:4px;}
+
+  .rows{max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.3,.7,.3,1);}
+  .group.open .rows{max-height:20000px;}
+  .rows-inner{padding:0 8px 8px;}
+
+  .item{border-top:1px solid var(--border);}
+  .item-row{display:flex; align-items:center; gap:11px; padding:11px 8px; cursor:pointer; border-radius:10px; transition:background .12s;}
+  .item-row:hover{background:var(--surface-2);}
+  .item-row:active{background:#F1F3F6;}
+  .item.attn-high .item-row{border-left:3px solid var(--s-rej-d); margin-left:-3px;}
+  .item-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;}
+  .item-name{font-size:14.5px; font-weight:600; letter-spacing:-.01em; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .item-sub{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .mid{font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--muted);}
+  .reason-chip{font-size:10.5px; font-weight:650; color:var(--s-rej-t); background:var(--s-rej-b); padding:2px 7px; border-radius:5px;}
+  .va-flag{font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px;}
+  .va-yes{color:var(--s-vac-t); background:var(--s-vac-b); cursor:pointer; transition:all .12s;}
+  .va-yes:active{transform:scale(.95);}
+  .va-copy{display:inline-flex; align-items:center; gap:6px; cursor:pointer; padding:5px 10px; background:var(--accent-tint); border:1px solid var(--border); border-radius:8px; transition:all .12s; font-family:var(--mono); font-size:12px; color:var(--ink);}
+  .va-copy:active{transform:scale(.97); border-color:var(--accent);}
+  .va-copy .copy-ic{color:var(--accent); flex:none; opacity:.5;}
+  .url-chip{font-size:10px; font-weight:650; color:var(--accent); background:var(--accent-tint); padding:2px 7px; border-radius:5px; text-decoration:none; white-space:nowrap; display:inline-flex; align-items:center; gap:2px;}
+  .url-chip:active{background:#E1E5FB;}
+  .step-tag{font-family:var(--mono); font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:4px; white-space:nowrap; color:var(--accent); background:var(--accent-tint);}
+  .step-tag.step-fail{color:var(--s-rej-t); background:var(--s-rej-b);}
+  .step-tag.step-done{color:var(--s-live-t); background:var(--s-live-b);}
+  .tracker{display:flex; align-items:flex-start; padding:6px 0 10px;}
+  .trk-step{display:flex; flex-direction:column; align-items:center; gap:4px; flex:none; min-width:38px;}
+  .trk-dot{width:10px; height:10px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface);}
+  .trk-step.done .trk-dot{background:var(--s-live-d); border-color:var(--s-live-d);}
+  .trk-step.active .trk-dot{background:var(--accent); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint);}
+  .trk-step.fail .trk-dot{background:var(--s-rej-d); border-color:var(--s-rej-d); box-shadow:0 0 0 3px var(--s-rej-b);}
+  .trk-lbl{font-size:9px; font-weight:600; color:var(--muted); text-align:center; white-space:nowrap;}
+  .trk-step.done .trk-lbl{color:var(--s-live-t);}
+  .trk-step.active .trk-lbl{color:var(--accent); font-weight:700;}
+  .trk-step.fail .trk-lbl{color:var(--s-rej-t); font-weight:700;}
+  .trk-line{flex:1; height:2px; background:var(--border); min-width:8px; margin-top:4px;}
+  .trk-line.done{background:var(--s-live-d);}
+  .badge{flex:none; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:650; padding:4px 9px; border-radius:999px; letter-spacing:-.01em; white-space:nowrap;}
+  .badge .bd{width:6px; height:6px; border-radius:50%;}
+
+  .detail{max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.3,.7,.3,1);}
+  .item.open .detail{max-height:1400px;}
+  .detail-inner{padding:2px 10px 15px; display:flex; flex-direction:column; gap:9px;}
+  .d-item{display:flex; align-items:baseline; gap:10px;}
+  .d-key{font-size:11.5px; color:var(--muted); font-weight:600; width:64px; flex:none;}
+  .d-val{font-size:13px; color:var(--ink); flex:1; min-width:0; word-break:break-word;}
+  .d-val.mono{font-family:var(--mono); font-size:11.5px;}
+  .link-btn{display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12.5px; font-weight:600; color:var(--accent); text-decoration:none; background:var(--accent-tint); padding:6px 11px; border-radius:8px; transition:background .15s;}
+  .link-btn:hover{background:#E1E5FB;}
+  .reason-val{color:var(--s-rej-t); background:var(--s-rej-b); padding:3px 9px; border-radius:7px; font-size:12px; font-weight:600; display:inline-block;}
+  .memo-val{font-size:12.5px; color:var(--ink-2); background:var(--surface-2); border:1px solid var(--border); border-radius:9px; padding:9px 11px; white-space:pre-wrap; display:block;}
+  .share-btn{display:inline-flex; align-items:center; gap:5px; cursor:pointer; padding:7px 12px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; font:inherit; font-size:12px; font-weight:600; color:var(--ink-2); transition:all .12s; width:100%;}
+  .share-btn:active{transform:scale(.98); border-color:var(--accent); color:var(--accent);}
+
+  .backdrop{position:fixed; inset:0; z-index:50; background:rgba(20,23,28,.42); display:flex; align-items:flex-end; justify-content:center; opacity:0; pointer-events:none; transition:opacity .2s;}
+  .backdrop.show{opacity:1; pointer-events:auto;}
+  .modal{background:var(--surface); width:100%; max-width:620px; border-radius:20px 20px 0 0; max-height:92vh; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; transform:translateY(24px); transition:transform .24s cubic-bezier(.3,.8,.3,1); padding:8px 18px calc(env(safe-area-inset-bottom) + 20px);}
+  .backdrop.show .modal{transform:translateY(0);}
+  .grabber{width:38px; height:4px; background:var(--border-strong); border-radius:3px; margin:8px auto 6px;}
+  .modal h2{font-size:17px; font-weight:700; letter-spacing:-.01em; padding:6px 2px 4px;}
+  .modal .msub{font-size:12px; color:var(--muted); padding:0 2px 16px; font-family:var(--mono);}
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-size:12px; font-weight:600; color:var(--ink-2); margin-bottom:6px;}
+  .field input, .field textarea, .field select{width:100%; border:1px solid var(--border-strong); background:var(--surface); border-radius:10px; padding:11px 12px; font:inherit; font-size:16px; color:var(--ink); outline:none; transition:border-color .15s, box-shadow .15s;}
+  .field textarea{resize:vertical; min-height:60px; line-height:1.5;}
+  .field input:focus, .field textarea:focus, .field select:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint);}
+  .modal-actions{display:flex; gap:9px; padding-top:8px;}
+  .modal-actions button{flex:1; border:0; font:inherit; font-size:14px; font-weight:650; padding:13px; border-radius:11px; cursor:pointer; transition:opacity .15s;}
+  .modal-actions .save{background:var(--accent); color:#fff;}
+  .modal-actions .cancel{background:var(--bg); color:var(--ink-2); border:1px solid var(--border-strong);}
+  .modal-actions button:active{opacity:.85;}
+
+  .toast{position:fixed; bottom:calc(env(safe-area-inset-bottom) + 24px); left:50%; transform:translateX(-50%) translateY(10px); background:var(--ink); color:#fff; font-size:13px; font-weight:500; padding:11px 18px; border-radius:11px; z-index:60; opacity:0; pointer-events:none; transition:all .25s; box-shadow:var(--shadow-lg); max-width:90%; text-align:center;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  button,.chip,.item-row,.group-head,.tabs button,.lang-toggle button,.link-btn,.toolbar button,.share-btn{touch-action:manipulation;}
+  @media (max-width:480px){
+    header{padding-top:calc(env(safe-area-inset-top) + 11px);}
+    .brand-title{font-size:18px;}
+    .tabs{margin-top:11px;}
+    .tabs button{padding:11px 8px; font-size:14px;}
+    .search{margin-top:10px;}
+    .chips{padding:10px 0 11px;}
+    main{padding:12px 13px calc(env(safe-area-inset-bottom) + 24px);}
+    .group-head{padding:14px 14px;}
+    .item-row{padding:13px 8px;}
+    .d-key{width:56px;}
+    .toolbar{flex-wrap:wrap;}
+  }
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="brand-l">
+        <div class="brand-title"><span class="brand-mark">SMOS</span><span id="titleText">Sub Merchant Onboarding Status</span></div>
+        <div class="brand-sub sync" id="syncWrap"><span class="sdot"></span><span id="syncPill">샘플 데이터 · 미연동</span></div>
+      </div>
+      <div class="lang-toggle" id="langToggle">
+        <button data-lang="KR" class="on">한국어</button>
+        <button data-lang="EN">EN</button>
+      </div>
+    </div>
+    <div class="tabs" id="tabs"></div>
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <input id="search" type="text" placeholder="상점명 · 고객명 · MID 검색" autocomplete="off">
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="toolbar">
+      <button id="btnSort">↕ 최근순</button>
+      <button id="btnConnect">🔗 시트 연동</button>
+      <button id="btnImport">⤒ 가져오기 (CSV/JSON)</button>
+      <button id="btnExportCsv">⤓ CSV 내보내기</button>
+      <button id="btnExportJson">JSON 백업</button>
+    </div>
+  </header>
+  <main id="list"></main>
+</div>
+
+<div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileInput" accept=".csv,.json,application/json,text/csv" style="display:none">
+
+<script>
+let BACKEND_URL = "";
+const POLL_SECONDS = 30;
+
+const TONES = {
+  slate:{t:'--s-recv-t',b:'--s-recv-b',d:'--s-recv-d'},
+  amber:{t:'--s-rev-t', b:'--s-rev-b', d:'--s-rev-d'},
+  orange:{t:'--s-vaw-t',b:'--s-vaw-b',d:'--s-vaw-d'},
+  blue:{t:'--s-vac-t', b:'--s-vac-b', d:'--s-vac-d'},
+  green:{t:'--s-live-t',b:'--s-live-b',d:'--s-live-d'},
+  rose:{t:'--s-rej-t', b:'--s-rej-b', d:'--s-rej-d'},
+};
+
+/* ---- i18n ---- */
+const STRINGS = {
+  KR:{
+    title:"온보딩 현황",
+    search:"상점명 · 고객명 · MID 검색",
+    all:"전체",
+    noResultTitle:"검색 결과가 없어요",
+    noResultSub:"다른 조건으로 찾아보세요.",
+    noItemTitle:"등록된 항목이 없어요",
+    noItemSub:"데이터를 연동하세요.",
+    noName:"(이름 없음)",
+    noGroup:"(미지정)",
+    sample:"샘플 데이터 · 미연동",
+    live:"실시간 · ",
+    disconnected:"연결 끊김 · 재시도 중",
+    syncWait:"동기화 대기",
+    justNow:"방금", secAgo:"초 전", minAgo:"분 전", hrAgo:"시간 전",
+    ticket:"지라 티켓", open:"열기",
+    connectTitle:"시트 연동",
+    connectSub:"Apps Script 웹앱 URL(…/exec)을 붙여넣으세요",
+    connect:"연결", reconnect:"다시 연결", close:"닫기",
+    disconnect:"연동 해제 (샘플로 전환)",
+    connecting:"연결 시도 중…",
+    connected:"연결됨 · 실시간 동기화 시작",
+    connectFail:"연결 실패 — URL·배포 권한을 확인하세요",
+    toSample:"샘플 데이터로 전환",
+    btnConnect:"🔗 시트 연동",
+    btnImport:"⤒ 가져오기 (CSV/JSON)",
+    btnExportCsv:"⤓ CSV 내보내기",
+    btnExportJson:"JSON 백업",
+    importDone:"행 가져왔어요",
+    importFail:"파일을 읽을 수 없어요",
+    jsonImported:"JSON 가져오기 완료",
+    csvExported:"CSV 내보냈어요",
+    jsonBackup:"JSON 백업 완료",
+    vaCopied:"VA 번호가 복사됐어요",
+    sortRecent:"↕ 최근순",
+    sortGroup:"↕ 그룹순",
+    attention:"주의 필요",
+    shareLabel:"📋 공유용 복사",
+    summaryCopied:"현황 요약이 복사됐어요",
+    vaIssued:"VA 발급",
+  },
+  EN:{
+    title:"Onboarding Status",
+    search:"Search merchant · client · MID",
+    all:"All",
+    noResultTitle:"No results found",
+    noResultSub:"Try a different search.",
+    noItemTitle:"No items yet",
+    noItemSub:"Connect a data source.",
+    noName:"(unnamed)",
+    noGroup:"(unassigned)",
+    sample:"Sample data · Not connected",
+    live:"Live · ",
+    disconnected:"Disconnected · Retrying",
+    syncWait:"Waiting to sync",
+    justNow:"just now", secAgo:"s ago", minAgo:"m ago", hrAgo:"h ago",
+    ticket:"Jira ticket", open:"Open",
+    connectTitle:"Connect Sheet",
+    connectSub:"Paste your Apps Script Web App URL (…/exec)",
+    connect:"Connect", reconnect:"Reconnect", close:"Close",
+    disconnect:"Disconnect (switch to sample)",
+    connecting:"Connecting…",
+    connected:"Connected · Live sync started",
+    connectFail:"Connection failed — check URL & deploy permissions",
+    toSample:"Switched to sample data",
+    btnConnect:"🔗 Connect Sheet",
+    btnImport:"⤒ Import CSV/JSON",
+    btnExportCsv:"⤓ Export CSV",
+    btnExportJson:"JSON Backup",
+    importDone:" rows imported",
+    importFail:"Cannot read file",
+    jsonImported:"JSON imported",
+    csvExported:"CSV exported",
+    jsonBackup:"JSON backup complete",
+    vaCopied:"VA number copied",
+    sortRecent:"↕ Recent",
+    sortGroup:"↕ By group",
+    attention:"Attention",
+    shareLabel:"📋 Copy summary",
+    summaryCopied:"Summary copied",
+    vaIssued:"VA issued",
+  },
+};
+let lang = "KR";
+const L = k => STRINGS[lang][k] || k;
+
+/* ---- Corridor schemas ---- */
+const CORRIDORS = {
+  KRW:{
+    label:"KRW",
+    columns:[
+      {field:"client",      header:"Client",             label:"Client",   labelEn:"Client",        role:"group"},
+      {field:"name",        header:"Sub- Merchant Name", label:"상점명",   labelEn:"Merchant",       role:"name"},
+      {field:"merchantId",  header:"Merchant ID",        label:"MID",      labelEn:"MID",            mono:true},
+      {field:"requestDate", header:"Request Date",       label:"요청일",   labelEn:"Requested",      mono:true, type:"date"},
+      {field:"ticket",      header:"Ticket URL",         label:"티켓",     labelEn:"Ticket",         type:"url"},
+      {field:"status",      header:"Onboarding Status",  label:"상태",     labelEn:"Status",         role:"status"},
+      {field:"kybReason",   header:"KYB Failed Reason",  label:"실패 사유",labelEn:"Failure Reason",  type:"reason", options:["","Compliance Rejection","Client-side Issue"]},
+      {field:"va",          header:"VA",                 label:"VA 번호",  labelEn:"VA No.",          mono:true},
+      {field:"vaStatus",    header:"VA Status",          label:"VA 상태",  labelEn:"VA Status",       type:"select", options:["","발급 성공","발급 만료","발급 취소완료","없음"]},
+      {field:"note",        header:"Onboarding Note",    label:"메모",     labelEn:"Note",            type:"long"},
+    ],
+    success:["Succeeded"],
+    statuses:[
+      {v:"KYC", tone:"amber"},
+      {v:"Ops confirming", tone:"blue"},
+      {v:"Succeeded", tone:"green"},
+      {v:"Failed", tone:"rose"},
+    ],
+    steps:[
+      {key:"request", label:"요청", labelEn:"Request"},
+      {key:"kyb", label:"KYB", labelEn:"KYB"},
+      {key:"result", label:"심사", labelEn:"Review"},
+      {key:"va", label:"VA 발급", labelEn:"VA Issued"},
+    ],
+  },
+  VND:{
+    label:"VND",
+    columns:[
+      {field:"merchantId",  header:"Merchant ID",             label:"MID",        labelEn:"MID",           mono:true},
+      {field:"name",        header:"Merchant Entity Name",    label:"상점명",     labelEn:"Merchant",       role:"name"},
+      {field:"fiMerchant",  header:"FI Merchant",             label:"FI Merchant", labelEn:"FI Merchant",   role:"group"},
+      {field:"fiPartner",   header:"FI Partner",              label:"FI Partner",  labelEn:"FI Partner"},
+      {field:"requestDate", header:"Request Date",            label:"요청일",     labelEn:"Requested",      mono:true, type:"date"},
+      {field:"status",      header:"Onboarding Status",       label:"상태",       labelEn:"Status",         role:"status"},
+      {field:"va",          header:"Assigned VA number",      label:"VA 번호",    labelEn:"VA No.",         mono:true},
+      {field:"vaDate",      header:"VA Issuance Date",        label:"VA 발급일",  labelEn:"VA Issued",      mono:true},
+      {field:"kycDate",     header:"Date of Onboarding KYC",  label:"KYC일",      labelEn:"KYC Date",       mono:true},
+      {field:"jira",        header:"Jira Link (for tracking)", label:"지라",      labelEn:"Jira",           type:"url"},
+    ],
+    success:["Approved"],
+    statuses:[
+      {v:"In progress", tone:"amber"},
+      {v:"Approved", tone:"green"},
+      {v:"Rejected / Offboarded", tone:"rose"},
+    ],
+    steps:[
+      {key:"request", label:"요청", labelEn:"Request"},
+      {key:"kyb", label:"KYB", labelEn:"KYB"},
+      {key:"result", label:"심사", labelEn:"Review"},
+      {key:"va", label:"VA 발급", labelEn:"VA Issued"},
+    ],
+  },
+};
+
+/* ---- Seed ---- */
+const J = id=>`https://sentbe-product.atlassian.net/browse/${id}`;
+const SEED = {
+  KRW:[
+    {client:"Sunrate", name:"Weihai Shuangquan Import and Export Trade Co., Ltd", merchantId:"MCID000323", requestDate:"2026-05-15", ticket:J("COAS-1990"), status:"Succeeded", kybReason:"", va:"56216499863816", vaStatus:"발급 성공", note:""},
+    {client:"Sunrate", name:"SHANGHAI FEILANG HOVERCRAFT CO., LIMITED", merchantId:"MCID000314", requestDate:"2026-05-20", ticket:J("COAS-1941"), status:"Succeeded", kybReason:"", va:"56216499864005", vaStatus:"발급 성공", note:""},
+    {client:"Sunrate", name:"Hangzhou Mofang Youchuang Trading Co., Ltd.", merchantId:"MCID000324", requestDate:"2026-05-18", ticket:J("COAS-1994"), status:"Failed", kybReason:"Client-side Issue", va:"56216499863821", vaStatus:"발급 만료", note:"2000원 환급 필요"},
+    {client:"Sunrate", name:"Guangzhou Qixiang Apparel Co., Ltd.", merchantId:"MCID000332", requestDate:"2026-06-01", ticket:J("COAS-2095"), status:"Succeeded", kybReason:"", va:"56216499863910", vaStatus:"발급 성공", note:"MCID000333 미승인 → 000332 사용"},
+    {client:"Sunrate", name:"Shenzhen Chuangquan Electronics Co., Ltd.", merchantId:"MCID000318", requestDate:"2026-05-10", ticket:J("COAS-1976"), status:"Failed", kybReason:"Compliance Rejection", va:"56216499863799", vaStatus:"발급 성공", note:"5월 20 계정 정지, 환불 여부 확인 필요 (입금 내역 없음)"},
+    {client:"GEP", name:"HANG ZHOU MO FANG YOU CHUANG SHANG MAO CO., LTD", merchantId:"MCID000328", requestDate:"2026-05-25", ticket:J("COAS-2049"), status:"Failed", kybReason:"Client-side Issue", va:"", vaStatus:"", note:"Sunrate·Payful 사용 희망"},
+    {client:"Futurepay", name:"MOUNTSNEAKERS E-COMMERCE LIMITED", merchantId:"MCID000322", requestDate:"2026-05-12", ticket:J("COAS-1982"), status:"Failed", kybReason:"Client-side Issue", va:"", vaStatus:"", note:""},
+    {client:"GEP", name:"XIAN YOU XIAN SHU HUI BAIHUODIAN", merchantId:"MCID000313", requestDate:"2026-05-08", ticket:J("COAS-1926"), status:"Failed", kybReason:"Compliance Rejection", va:"", vaStatus:"", note:"5월 20 계정 정지, 환불 여부 확인 필요"},
+    {client:"Mdaq", name:"ZOCOCOON BUSINESS HONG KONG LIMITED", merchantId:"MCID000329", requestDate:"2026-06-05", ticket:J("COAS-2066"), status:"Failed", kybReason:"Compliance Rejection", va:"", vaStatus:"발급 취소완료", note:""},
+    {client:"Sunrate", name:"Little Panda E-commerce Limited", merchantId:"MCID000336", requestDate:"2026-06-10", ticket:J("COAS-2106"), status:"Succeeded", kybReason:"", va:"56216499863943", vaStatus:"발급 성공", note:""},
+    {client:"HONGKONG FORTUNETECH LIMITED", name:"Yezi International Trade Co., Ltd.", merchantId:"MCID000360", requestDate:"2026-04-28", ticket:J("COAS-2183"), status:"Failed", kybReason:"", va:"", vaStatus:"", note:"온보딩 요청 2개월 이상 — 거절"},
+    {client:"Pyvio", name:"BORVIA TRADING LIMITED", merchantId:"MCID000363", requestDate:"2026-04-25", ticket:J("COAS-2205"), status:"Failed", kybReason:"", va:"", vaStatus:"", note:"온보딩 요청 2개월 이상 — 거절"},
+    {client:"Sunrate", name:"Weihai Yicai Trading Co., Ltd.", merchantId:"MCID000367", requestDate:"2026-07-02", ticket:J("COAS-2236"), status:"KYC", kybReason:"", va:"", vaStatus:"", note:""},
+    {client:"Pyvio", name:"BS CULTURE ENTERTAINMENT LIMITED", merchantId:"MCID000377", requestDate:"2026-06-28", ticket:J("COAS-2271"), status:"Ops confirming", kybReason:"", va:"", vaStatus:"", note:""},
+    {client:"GEP", name:"QITIAN TRADE LIMITED", merchantId:"MCID000380", requestDate:"2026-06-30", ticket:J("COAS-2285"), status:"Ops confirming", kybReason:"", va:"", vaStatus:"", note:""},
+    {client:"Sunrate", name:"QICAIJIAJU LIMITED COMPANY", merchantId:"MCID000391", requestDate:"2026-07-05", ticket:J("COAS-2315"), status:"KYC", kybReason:"", va:"", vaStatus:"", note:""},
+    {client:"Sunrate", name:"TIANHUI JUNHE (HK) HOLDING CO., LIMITED", merchantId:"MCID000397", requestDate:"2026-06-20", ticket:J("COAS-2349"), status:"Failed", kybReason:"Compliance Rejection", va:"", vaStatus:"", note:"성인용품 취급 회사로 서비스 거절"},
+    {client:"Mdaq", name:"NORDIC NATURAL RESOURCES LTD", merchantId:"MCID000386", requestDate:"2026-06-12", ticket:J("COAS-2305"), status:"Succeeded", kybReason:"", va:"", vaStatus:"", note:"조건부 승인"},
+    {client:"Sunrate", name:"Xiamen Kairuiding Network Technology Co., Ltd.", merchantId:"MCID000378", requestDate:"2026-06-15", ticket:J("COAS-2296"), status:"Succeeded", kybReason:"", va:"", vaStatus:"", note:""},
+    {client:"", name:"Qingdao Talelor International Trading", merchantId:"", requestDate:"2026-07-04", ticket:J("COAS-2346"), status:"KYC", kybReason:"", va:"", vaStatus:"", note:""},
+  ],
+  VND:[
+    {merchantId:"VN005", name:"Zhongshan Zhetai Trading Co., Ltd.", fiMerchant:"MDAQ", fiPartner:"H-PAY", requestDate:"2026-06-10", status:"Approved", va:"9631242000029033870", vaDate:"2026-06-24", kycDate:"2026-07-02", jira:""},
+    {merchantId:"VN052", name:"Hekou Gedeng Cross border E-commerce Co., Ltd", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9631242000029032352", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
+    {merchantId:"VN053", name:"Ebuy1688 Trading Limited", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9631242000027685665", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN054", name:"HK YIDING GLOBAL TRADING LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-14", status:"Approved", va:"9631242000029032897", vaDate:"2026-06-24", kycDate:"2026-06-30", jira:""},
+    {merchantId:"VN056", name:"Hekou Xindongjin Cross border E-commerce Co., Ltd", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-05", status:"Approved", va:"9631242000027686770", vaDate:"2026-06-16", kycDate:"", jira:""},
+    {merchantId:"VN057", name:"CHENYIN TRADING LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9631242000029033113", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
+    {merchantId:"VN058", name:"DONG XING SHI CHANG SHUN MAO YI CO., LTD", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9631242000029033592", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
+    {merchantId:"VN059", name:"ASIA CITIC GROUP LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9631242000029033497", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
+    {merchantId:"VN060", name:"CLOUD WAVE (HONG KONG) LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9631242000027686974", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN061", name:"MF Trading Limited", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9631242000027687695", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN065", name:"GUANGXI TENGYU SUPPLY CHAIN CO., LTD.", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-14", status:"Approved", va:"9631242000029034286", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
+    {merchantId:"VN070", name:"Sanhe City E-Commerce Co., Ltd.", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9631242000027687560", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN074", name:"HONG KONG GMS GROUP LIMITED", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-04", status:"Approved", va:"9631242000028941531", vaDate:"2026-06-23", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN081", name:"J. T. ENGINEERING MANAGEMENT COMPANY LIMITED", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-08", status:"Approved", va:"9631242000029032390", vaDate:"2026-06-24", kycDate:"2026-06-17", jira:""},
+    {merchantId:"VN082", name:"Lanan Media Limited", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-08", status:"Approved", va:"9631242000029032488", vaDate:"2026-06-24", kycDate:"2026-06-17", jira:""},
+    {merchantId:"VN086", name:"HEKOU JIUTAI INTERNATIONAL SUPPLY CHAIN MANAGEMENT CO., LTD", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9631242000027686354", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN098", name:"Miji Infrastructure Technical Service Company Limited", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9631242000027687185", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
+    {merchantId:"VN099", name:"SENDIT TECHNOLOGY LIMITED", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-25", status:"Rejected / Offboarded", va:"", vaDate:"", kycDate:"2026-07-01", jira:""},
+  ],
+};
+
+/* ============================ Data layer ============================ */
+const Store = {
+  data:{KRW:[],VND:[]}, online:false, lastSync:null,
+  async fetchRemote(){ const r=await fetch(BACKEND_URL,{cache:"no-store"}); if(!r.ok) throw new Error("http "+r.status); return await r.json(); },
+  async load(){
+    if(BACKEND_URL){ try{ this.data=await this.fetchRemote(); this.online=true; this.lastSync=Date.now(); ensureIds(this.data); return; }catch(e){ console.warn("backend load failed, using seed",e); this.online=false; } }
+    this.data = JSON.parse(JSON.stringify(SEED)); ensureIds(this.data);
+  },
+  rows(){ return this.data[active] || (this.data[active]=[]); },
+};
+function ensureIds(d){ for(const k in d)(d[k]||[]).forEach(r=>{ if(!r.id) r.id=uid(); }); }
+async function refresh(){
+  if(!BACKEND_URL) return;
+  if(backdrop.classList.contains("show")) return;
+  try{ const d=await Store.fetchRemote(); ensureIds(d); Store.data=d; Store.online=true; Store.lastSync=Date.now();
+       const y=window.scrollY; render(); window.scrollTo(0,y); }
+  catch(e){ Store.online=false; updateSync(); }
+}
+function rel(ts){ if(!ts) return L("syncWait"); const s=Math.floor((Date.now()-ts)/1000);
+  if(s<10) return L("justNow"); if(s<60) return s+L("secAgo"); const m=Math.floor(s/60); if(m<60) return m+L("minAgo"); return Math.floor(m/60)+L("hrAgo"); }
+function updateSync(){ const el=$("#syncPill"), w=$("#syncWrap"); if(!el||!w) return;
+  if(!BACKEND_URL){ w.className="brand-sub sync"; el.textContent=L("sample"); }
+  else if(Store.online){ w.className="brand-sub sync live"; el.textContent=L("live")+rel(Store.lastSync); }
+  else { w.className="brand-sub sync off"; el.textContent=L("disconnected"); }
+}
+
+/* ============================ Helpers ============================ */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = ()=>Math.random().toString(36).slice(2,9);
+const CORR = ()=>CORRIDORS[active];
+const colOf = role=>CORR().columns.find(c=>c.role===role);
+const groupField=()=>colOf("group").field;
+const nameField =()=>colOf("name").field;
+const colLabel = c => lang==="EN" ? (c.labelEn||c.label) : c.label;
+function statusMeta(v){ const s=CORR().statuses.find(x=>x.v===v); const tone=TONES[s?s.tone:"slate"]; return {label:v||"—", ...tone}; }
+
+function stepOf(r){
+  const c=CORR(); if(!c.steps) return null;
+  const n=c.steps.length;
+  const states=new Array(n).fill("pending");
+  states[0]="done";
+  if(active==="KRW"){
+    if(r.status==="KYC"||r.status==="Ops confirming"){ states[1]="active"; }
+    else if(r.status==="Succeeded"){ states[1]="done"; states[2]="done"; if(r.va) states[3]="done"; }
+    else if(r.status==="Failed"){ states[1]="done"; states[2]="fail"; }
+  } else if(active==="VND"){
+    if(r.status==="In progress"){ states[1]="active"; }
+    else if(r.status==="Approved"){ states[1]="done"; states[2]="done"; if(r.va) states[3]="done"; }
+    else if(r.status==="Rejected / Offboarded"){ states[1]="done"; states[2]="fail"; }
+  }
+  return {states, steps:c.steps};
+}
+function stepTag(r){
+  const info=stepOf(r); if(!info) return "";
+  const {states,steps}=info;
+  const ai=states.indexOf("active"), fi=states.indexOf("fail");
+  const sLbl=s=>lang==="EN"?(s.labelEn||s.label):s.label;
+  if(fi>=0) return `<span class="step-tag step-fail">${sLbl(steps[fi])} ✕</span>`;
+  if(ai>=0) return `<span class="step-tag">${ai+1}/${steps.length} ${sLbl(steps[ai])}</span>`;
+  const done=states.filter(s=>s==="done").length;
+  if(done===steps.length) return "";
+  return `<span class="step-tag step-done">${done}/${steps.length}</span>`;
+}
+function stepTracker(r){
+  const info=stepOf(r); if(!info) return "";
+  const {states,steps}=info;
+  const sLbl=s=>lang==="EN"?(s.labelEn||s.label):s.label;
+  let h='<div class="tracker">';
+  steps.forEach((s,i)=>{
+    h+=`<div class="trk-step ${states[i]}"><div class="trk-dot"></div><div class="trk-lbl">${sLbl(s)}</div></div>`;
+    if(i<steps.length-1){ const ld=states[i]==="done"&&states[i+1]!=="pending"; h+=`<div class="trk-line${ld?" done":""}"></div>`; }
+  });
+  return h+"</div>";
+}
+function isAttention(r){
+  const fail=CORR().statuses.filter(s=>s.tone==="rose").map(s=>s.v);
+  if(fail.includes(r.status)) return "high";
+  return null;
+}
+function buildSummary(r){
+  const name=r[nameField()]||"—";
+  const mid=r.merchantId?` (${r.merchantId})`:"";
+  const status=r.status||"—";
+  const va=r.va?` · ${L("vaIssued")}`:"";
+  const info=stepOf(r);
+  let stepStr="";
+  if(info){
+    const ai=info.states.indexOf("active"), fi=info.states.indexOf("fail");
+    const sLbl=s=>lang==="EN"?(s.labelEn||s.label):s.label;
+    if(ai>=0) stepStr=` · ${ai+1}/${info.steps.length} ${sLbl(info.steps[ai])}`;
+    else if(fi>=0) stepStr=` · ${sLbl(info.steps[fi])} ${lang==="EN"?"failed":"실패"}`;
+  }
+  const rc=CORR().columns.find(c=>c.type==="reason");
+  const reason=rc&&r[rc.field]?` · ${r[rc.field]}`:"";
+  return `${name}${mid} — ${status}${va}${reason}${stepStr}`;
+}
+function clipCopy(text,msg){ navigator.clipboard.writeText(text).then(()=>toast(msg)).catch(()=>{const t=document.createElement("textarea");t.value=text;t.style.position="fixed";t.style.opacity="0";document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);toast(msg);}); }
+
+let active = "KRW";
+let filter = "all";
+let query = "";
+let sortMode = "group";
+const openGroups = new Set();
+const openItems = new Set();
+
+/* ============================ Render ============================ */
+function statusBadge(v){ const s=statusMeta(v); return `<span class="badge" style="color:var(${s.t});background:var(${s.b})"><span class="bd" style="background:var(${s.d})"></span>${esc(s.label)}</span>`; }
+
+function matchRow(r){
+  if(filter==="attention") return !!isAttention(r);
+  if(filter!=="all" && r.status!==filter) return false;
+  const q=query.toLowerCase(); if(!q) return true;
+  return [nameField(),groupField(),"merchantId"].some(f=>String(r[f]||"").toLowerCase().includes(q));
+}
+
+function render(){
+  $("#titleText").textContent = "Sub Merchant Onboarding Status";
+  $("#search").placeholder = L("search");
+  const sortBtn=$("#btnSort");
+  sortBtn.textContent = sortMode==="recent"?L("sortRecent"):L("sortGroup");
+  sortBtn.classList.toggle("sort-on", sortMode==="recent");
+  $("#btnConnect").textContent = L("btnConnect");
+  $("#btnImport").textContent = L("btnImport");
+  $("#btnExportCsv").textContent = L("btnExportCsv");
+  $("#btnExportJson").textContent = L("btnExportJson");
+  renderTabs(); renderChips(); updateSync();
+
+  const rows = Store.rows().filter(matchRow);
+  const gf=groupField(), nf=nameField();
+  const groups={};
+  rows.forEach(r=>{ const g=r[gf]||L("noGroup"); (groups[g]=groups[g]||[]).push(r); });
+  let names=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+
+  if(sortMode==="recent"){
+    for(const g of names) groups[g].sort((a,b)=>(b.requestDate||"").localeCompare(a.requestDate||""));
+    names.sort((a,b)=>{
+      const ma=groups[a].reduce((mx,r)=>r.requestDate>mx?r.requestDate:mx,"");
+      const mb=groups[b].reduce((mx,r)=>r.requestDate>mx?r.requestDate:mx,"");
+      return mb.localeCompare(ma);
+    });
+  }
+
+  let html="";
+  if(!names.length){
+    html=`<div class="empty"><div class="big">${query||filter!=="all"?L("noResultTitle"):L("noItemTitle")}</div>
+      <div class="sm">${query||filter!=="all"?L("noResultSub"):L("noItemSub")}</div></div>`;
+  } else {
+    const forceOpen = !!(query||filter!=="all");
+    for(const g of names){
+      const gr=groups[g];
+      const succ=gr.filter(r=>CORR().success.includes(r.status)).length;
+      const pct=Math.round(succ/gr.length*100);
+      const attnCnt=gr.filter(r=>isAttention(r)).length;
+      const isOpen = forceOpen || openGroups.has(active+"|"+g);
+      html+=`<div class="group ${isOpen?'open':''}" data-g="${esc(g)}">
+        <div class="group-head" data-act="tg-group">
+          <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="group-name">${esc(g)}</span>
+          <div class="group-meta">
+            ${attnCnt?`<span class="attn-cnt">⚠ ${attnCnt}</span>`:""}
+            <div class="ratio"><span class="ratio-txt">${succ}/${gr.length}</span><div class="ratio-bar"><i style="width:${pct}%"></i></div></div>
+          </div>
+        </div>
+        <div class="rows"><div class="rows-inner">
+          ${gr.map(r=>itemHTML(r)).join("")}
+        </div></div>
+      </div>`;
+    }
+  }
+  $("#list").innerHTML=html;
+}
+
+function itemHTML(r){
+  const key=active+"|"+r.id;
+  const isOpen=openItems.has(key);
+  const reasonCol=CORR().columns.find(c=>c.type==="reason");
+  const reason=reasonCol?r[reasonCol.field]:"";
+  const mid=r.merchantId;
+  const attn=isAttention(r);
+  const attnCls=attn==="high"?"attn-high":"";
+  return `<div class="item ${isOpen?'open':''} ${attnCls}" data-id="${r.id}">
+    <div class="item-row" data-act="tg-item">
+      <div class="item-main">
+        <div class="item-name">${esc(r[nameField()])||`<span style="color:var(--muted)">${L("noName")}</span>`}</div>
+        <div class="item-sub">
+          ${mid?`<span class="mid">${esc(mid)}</span>`:``}
+          ${stepTag(r)}
+          ${r.va?`<span class="va-flag va-yes" data-act="copy-va" data-va="${esc(r.va)}">VA ✓</span>`:``}
+          ${reason?`<span class="reason-chip">${esc(reason)}</span>`:``}
+          ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>`<a class="url-chip" href="${esc(r[c.field])}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`).join("")}
+        </div>
+      </div>
+      ${statusBadge(r.status)}
+    </div>
+    <div class="detail"><div class="detail-inner">
+      ${stepTracker(r)}
+      ${CORR().columns.filter(c=>!c.role || c.role==="status").map(c=>detailRow(r,c)).filter(Boolean).join("")}
+      <button class="share-btn" data-act="copy-summary" data-id="${r.id}">${L("shareLabel")}</button>
+    </div></div>
+  </div>`;
+}
+
+function detailRow(r,c){
+  const v=r[c.field];
+  const lbl = colLabel(c);
+  if(c.role==="status") return `<div class="d-item"><span class="d-key">${lbl}</span><span class="d-val">${statusBadge(r.status)}</span></div>`;
+  if(!v) return "";
+  let val;
+  if(c.type==="url") val=`<a class="link-btn" href="${esc(v)}" target="_blank" rel="noopener">${c.field==="ticket"||c.field==="jira"?L("ticket"):L("open")} ↗</a>`;
+  else if(c.type==="reason") val=`<span class="reason-val">${esc(v)}</span>`;
+  else if(c.type==="long") val=`<span class="memo-val">${esc(v)}</span>`;
+  else if(c.type==="date"){ val=`<span class="mono">${esc(v)}</span>`; }
+  else if(c.field==="va") val=`<span class="va-copy" data-act="copy-va" data-va="${esc(v)}"><span>${esc(v)}</span><svg class="copy-ic" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 11V3.5a1.5 1.5 0 011.5-1.5H11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>`;
+  else val=`<span class="${c.mono?'mono':''}">${esc(v)}</span>`;
+  return `<div class="d-item"><span class="d-key">${lbl}</span><span class="d-val ${c.mono&&c.type!=='url'?'mono':''}">${val}</span></div>`;
+}
+
+function renderTabs(){
+  $("#tabs").innerHTML=Object.keys(CORRIDORS).map(k=>{
+    const n=(Store.data[k]||[]).length;
+    return `<button data-tab="${k}" class="${active===k?'on':''}">${CORRIDORS[k].label}<span class="tcnt">${n}</span></button>`;
+  }).join("");
+}
+function renderChips(){
+  const rows=Store.rows();
+  const attnTotal=rows.filter(r=>isAttention(r)).length;
+  let html=`<button class="chip ${filter==='all'?'on':''}" data-filter="all">${L("all")} <span class="cnt">${rows.length}</span></button>`;
+  if(attnTotal) html+=`<button class="chip ${filter==='attention'?'on':''}" data-filter="attention"><span class="dot" style="background:var(--s-vaw-d)"></span>${L("attention")} <span class="cnt">${attnTotal}</span></button>`;
+  CORR().statuses.forEach(s=>{
+    const n=rows.filter(r=>r.status===s.v).length;
+    if(n===0 && filter!==s.v) return;
+    const t=TONES[s.tone];
+    html+=`<button class="chip ${filter===s.v?'on':''}" data-filter="${esc(s.v)}"><span class="dot" style="background:var(${t.d})"></span>${esc(s.v)} <span class="cnt">${n}</span></button>`;
+  });
+  $("#chips").innerHTML=html;
+}
+
+/* ============================ Events ============================ */
+$("#langToggle").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; lang=b.dataset.lang; [...$("#langToggle").children].forEach(x=>x.classList.toggle("on",x===b)); document.documentElement.lang=lang==="EN"?"en":"ko"; render(); });
+$("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; active=b.dataset.tab; filter="all"; query=""; $("#search").value=""; render(); });
+$("#search").addEventListener("input",e=>{ query=e.target.value.trim(); render(); });
+$("#chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b)return; filter=b.dataset.filter; render(); });
+$("#btnSort").addEventListener("click",()=>{ sortMode=sortMode==="group"?"recent":"group"; render(); });
+
+$("#list").addEventListener("click",e=>{
+  const el=e.target.closest("[data-act]"); if(!el)return;
+  const act=el.dataset.act;
+  if(act==="copy-va"){ e.stopPropagation(); clipCopy(el.dataset.va, L("vaCopied")); return; }
+  if(act==="copy-summary"){ e.stopPropagation(); const r=Store.rows().find(x=>x.id===el.dataset.id); if(r) clipCopy(buildSummary(r), L("summaryCopied")); return; }
+  if(act==="link") return;
+  const groupEl=e.target.closest(".group"), itemEl=e.target.closest(".item");
+  const g=groupEl?.dataset.g, id=itemEl?.dataset.id;
+  if(act==="tg-group"){ if(query||filter!=="all")return; const k=active+"|"+g; openGroups.has(k)?openGroups.delete(k):openGroups.add(k); groupEl.classList.toggle("open"); return; }
+  if(act==="tg-item"){ const k=active+"|"+id; openItems.has(k)?openItems.delete(k):openItems.add(k); itemEl.classList.toggle("open"); return; }
+});
+
+/* ============================ Modal ============================ */
+const backdrop=$("#backdrop"), modal=$("#modal");
+function openModal(html){ modal.innerHTML=`<div class="grabber"></div>`+html; backdrop.classList.add("show"); }
+function closeModal(){ backdrop.classList.remove("show"); }
+backdrop.addEventListener("click",e=>{ if(e.target===backdrop)closeModal(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape")closeModal(); });
+
+/* ============================ Import / Export ============================ */
+$("#btnConnect").addEventListener("click", openConnect);
+$("#btnImport").addEventListener("click",()=>$("#fileInput").click());
+$("#fileInput").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      if(/\.json$/i.test(f.name)){ Store.data=JSON.parse(rd.result); for(const k in Store.data)(Store.data[k]||[]).forEach(r=>{if(!r.id)r.id=uid();}); render(); toast(L("jsonImported")); }
+      else { const n=importCSV(rd.result); render(); toast(`${active} ${n}${L("importDone")}`); }
+    }catch(err){ console.error(err); toast(L("importFail")); }
+  };
+  rd.readAsText(f); e.target.value="";
+});
+function normHeader(h){ return String(h).toLowerCase().replace(/\(for tracking\)/g,"").replace(/[-\s]+/g," ").trim(); }
+function importCSV(text){
+  const rows=parseCSV(text).filter(r=>r.some(c=>String(c).trim()!==""));
+  if(!rows.length) return 0;
+  const headers=rows[0].map(normHeader);
+  const map={}; CORR().columns.forEach(c=>{ const idx=headers.indexOf(normHeader(c.header)); if(idx>=0) map[c.field]=idx; });
+  const out=[];
+  for(let i=1;i<rows.length;i++){
+    const cells=rows[i]; const o={id:uid()};
+    let has=false;
+    CORR().columns.forEach(c=>{ if(map[c.field]!=null){ const v=(cells[map[c.field]]||"").trim(); o[c.field]=v; if(v)has=true; } });
+    if(has && (o[nameField()]||o.merchantId)) out.push(o);
+  }
+  Store.data[active]=out; return out.length;
+}
+function parseCSV(text){
+  const rows=[]; let row=[],cur="",q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else{ if(c==='"')q=true; else if(c===',' ){row.push(cur);cur="";} else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur="";} else if(c==='\r'){} else cur+=c; }
+  }
+  if(cur!==""||row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+function toCSV(){
+  const cols=CORR().columns;
+  const q=v=>{ v=String(v??""); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[cols.map(c=>q(c.header)).join(",")];
+  Store.rows().forEach(r=>lines.push(cols.map(c=>q(r[c.field])).join(",")));
+  return lines.join("\r\n");
+}
+function download(name,content,type){ const b=new Blob([content],{type}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
+$("#btnExportCsv").addEventListener("click",()=>{ download(`SMOS_${active}_${new Date().toISOString().slice(0,10)}.csv`, "﻿"+toCSV(), "text/csv;charset=utf-8"); toast(`${active} ${L("csvExported")}`); });
+$("#btnExportJson").addEventListener("click",()=>{ download(`SMOS_backup_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(Store.data,null,2), "application/json"); toast(L("jsonBackup")); });
+
+/* ============================ Toast + init ============================ */
+let toastT; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2100); }
+let pollTimer=null;
+function startPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } if(BACKEND_URL && POLL_SECONDS>0) pollTimer=setInterval(()=>refresh(), POLL_SECONDS*1000); }
+function openConnect(){
+  openModal(`<h2>${L("connectTitle")}</h2><div class="msub">${L("connectSub")}</div>
+    <div class="field"><label>Web App URL</label><input type="url" id="f_url" value="${esc(BACKEND_URL)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></div>
+    <div class="modal-actions"><button class="cancel" data-close>${L("close")}</button><button class="save" id="connBtn">${BACKEND_URL?L("reconnect"):L("connect")}</button></div>
+    ${BACKEND_URL?`<button id="disconnBtn" style="margin-top:10px;width:100%;border:1px solid var(--border-strong);background:var(--surface);color:var(--s-rej-t);font:inherit;font-weight:600;font-size:13px;padding:11px;border-radius:11px;cursor:pointer">${L("disconnect")}</button>`:""}`);
+  modal.querySelector("[data-close]").onclick=closeModal;
+  $("#connBtn").onclick=async ()=>{ const u=$("#f_url").value.trim(); if(!u){ $("#f_url").focus(); return; }
+    BACKEND_URL=u; toast(L("connecting")); await Store.load();
+    if(Store.online){ closeModal(); render(); startPolling(); toast(L("connected")); }
+    else { render(); toast(L("connectFail")); } };
+  const db=$("#disconnBtn"); if(db) db.onclick=async ()=>{ BACKEND_URL=""; startPolling(); await Store.load(); closeModal(); render(); toast(L("toSample")); };
+  $("#f_url").focus();
+}
+$("#syncWrap").addEventListener("click", openConnect);
+(async function(){ await Store.load(); render(); startPolling(); setInterval(updateSync, 15000); })();
+</script>
+</body>
+</html>
