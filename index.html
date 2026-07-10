@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SMOS · 온보딩 현황</title>
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="https://accounts.google.com/gsi/client" async></script>
 <style>
   :root{
     --bg:#F2F6FF; --surface:#FFFFFF; --surface-2:#F7F9FE;
@@ -177,19 +178,50 @@
     .toolbar{flex-wrap:wrap;}
   }
   @media (prefers-reduced-motion: reduce){ *{transition:none !important; animation:none !important;} }
+
+  .login-screen{position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:20px; padding:24px;}
+  .login-screen.hidden{display:none;}
+  .login-card{background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:40px 32px 36px; text-align:center; max-width:360px; width:100%; box-shadow:var(--shadow-lg);}
+  .login-card .brand-mark{font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:.08em; color:var(--accent); background:var(--accent-tint); padding:5px 10px; border-radius:8px; display:inline-block; margin-bottom:14px;}
+  .login-card h1{font-size:20px; font-weight:750; letter-spacing:-.02em; margin-bottom:6px;}
+  .login-card p{font-size:13px; color:var(--muted); margin-bottom:24px; line-height:1.5;}
+  .login-card .login-error{font-size:12px; color:var(--s-rej-t); background:var(--s-rej-b); padding:8px 12px; border-radius:8px; margin-bottom:16px; display:none;}
+  .login-card .login-error.show{display:block;}
+  .g-btn{display:inline-flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border-strong); border-radius:12px; padding:12px 24px; font:inherit; font-size:14px; font-weight:600; color:var(--ink); cursor:pointer; transition:all .15s; box-shadow:var(--shadow);}
+  .g-btn:hover{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint);}
+  .g-btn:active{transform:scale(.97);}
+  .g-btn svg{flex:none;}
+  .user-pill{display:inline-flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border-strong); border-radius:9px; padding:4px 10px 4px 4px; cursor:pointer; transition:all .15s;}
+  .user-pill:hover{border-color:var(--accent);}
+  .user-pill img{width:24px; height:24px; border-radius:50%;}
+  .user-pill span{font-size:12px; font-weight:600; color:var(--ink-2); max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <span class="brand-mark">SMOS</span>
+    <h1>Sub Merchant Onboarding Status</h1>
+    <p id="loginDesc">초대된 사용자만 접근할 수 있습니다.<br>Google 계정으로 로그인하세요.</p>
+    <div class="login-error" id="loginError"></div>
+    <div id="gsiButtonWrap" style="display:inline-block;"></div>
+  </div>
+</div>
+<div class="wrap" style="display:none" id="appWrap">
   <header>
     <div class="brand">
       <div class="brand-l">
         <div class="brand-title"><span class="brand-mark">SMOS</span><span id="titleText">Sub Merchant Onboarding Status</span></div>
         <div class="brand-sub sync" id="syncWrap"><span class="sdot"></span><span id="syncPill">샘플 데이터 · 미연동</span></div>
       </div>
-      <div class="lang-toggle" id="langToggle">
-        <button data-lang="KR" class="on">한국어</button>
-        <button data-lang="EN">EN</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="user-pill" id="userPill" style="display:none;" title="로그아웃">
+          <img id="userAvatar" src="" alt=""><span id="userName"></span>
+        </div>
+        <div class="lang-toggle" id="langToggle">
+          <button data-lang="KR" class="on">한국어</button>
+          <button data-lang="EN">EN</button>
+        </div>
       </div>
     </div>
     <div class="tabs" id="tabs"></div>
@@ -212,7 +244,30 @@
 
 <script>
 let BACKEND_URL = "https://script.google.com/macros/s/AKfycbzatAT4lq83Ybl4DW5XoCLfjy6tiGPmcVhjJjaN2P6Sryg0EtuFWifVP4BIrGjvDf2F/exec";
+const GOOGLE_CLIENT_ID = "690250277277-otqse7oa1ro37uhut34ja9fp43dmkpge.apps.googleusercontent.com";
 const POLL_SECONDS = 30;
+
+const Auth = {
+  token: null,
+  email: null,
+  name: null,
+  picture: null,
+  role: null,
+  get loggedIn(){ return !!this.token; },
+  set(credential){
+    this.token = credential;
+    const parts = credential.split(".");
+    if(parts.length===3){
+      try{
+        const p = JSON.parse(atob(parts[1].replace(/-/g,"+").replace(/_/g,"/")));
+        this.email = p.email||"";
+        this.name = p.name||p.email||"";
+        this.picture = p.picture||"";
+      }catch(e){}
+    }
+  },
+  clear(){ this.token=null; this.email=null; this.name=null; this.picture=null; this.role=null; },
+};
 
 const TONES = {
   slate:{t:'--s-recv-t',b:'--s-recv-b',d:'--s-recv-d'},
@@ -232,12 +287,17 @@ const STRINGS = {
     noResultTitle:"검색 결과가 없어요",
     noResultSub:"다른 조건으로 찾아보세요.",
     noItemTitle:"데이터를 불러올 수 없어요",
-    noItemSub:"백엔드가 연결되지 않았거나 접근 권한이 없습니다.",
+    noItemSub:"로그인 후 다시 시도해주세요.",
     noName:"(이름 없음)",
     noGroup:"(미지정)",
     sample:"샘플 데이터 · 미연동",
     noBackend:"백엔드 미연결",
-    authError:"접근 권한 없음 · @sentbe.com 계정 필요",
+    notLoggedIn:"로그인 필요",
+    authError:"인증 오류 · 다시 로그인하세요",
+    forbidden:"접근 권한 없음 · 초대된 사용자만 이용 가능",
+    logout:"로그아웃",
+    logoutConfirm:"로그아웃하시겠습니까?",
+    logoutYes:"로그아웃",
     live:"실시간 · ",
     disconnected:"연결 끊김 · 재시도 중",
     syncWait:"동기화 대기",
@@ -275,12 +335,17 @@ const STRINGS = {
     noResultTitle:"No results found",
     noResultSub:"Try a different search.",
     noItemTitle:"Unable to load data",
-    noItemSub:"Backend is not connected or access is unauthorized.",
+    noItemSub:"Please log in and try again.",
     noName:"(unnamed)",
     noGroup:"(unassigned)",
     sample:"Sample data · Not connected",
     noBackend:"Backend not connected",
-    authError:"Unauthorized · @sentbe.com account required",
+    notLoggedIn:"Login required",
+    authError:"Auth error · Please log in again",
+    forbidden:"Access denied · Invited users only",
+    logout:"Log out",
+    logoutConfirm:"Log out?",
+    logoutYes:"Log out",
     live:"Live · ",
     disconnected:"Disconnected · Retrying",
     syncWait:"Waiting to sync",
@@ -379,18 +444,18 @@ const CORRIDORS = {
 /* ============================ Data layer ============================ */
 const Store = {
   data:{KRW:[],VND:[]}, online:false, authError:false, lastSync:null,
-  async fetchRemote(){ const r=await fetch(BACKEND_URL,{cache:"no-store"}); if(!r.ok) throw new Error("http "+r.status); return await r.json(); },
+  async fetchRemote(){ const url=BACKEND_URL+(Auth.token?"?token="+encodeURIComponent(Auth.token):""); const r=await fetch(url,{cache:"no-store"}); if(!r.ok) throw new Error("http "+r.status); return await r.json(); },
   async load(){
-    if(BACKEND_URL){ try{ const d=await this.fetchRemote(); if(d.error){ console.warn("backend auth error:",d.message); this.online=false; this.authError=true; return; } this.data=d; this.online=true; this.authError=false; this.lastSync=Date.now(); ensureIds(this.data); return; }catch(e){ console.warn("backend load failed",e); this.online=false; } }
+    if(BACKEND_URL && Auth.loggedIn){ try{ const d=await this.fetchRemote(); if(d.error){ console.warn("backend auth error:",d.message); this.online=false; this.authError=d.error==="forbidden"?"forbidden":"auth"; return; } if(d._user){ Auth.role=d._user.role; delete d._user; } this.data=d; this.online=true; this.authError=false; this.lastSync=Date.now(); ensureIds(this.data); return; }catch(e){ console.warn("backend load failed",e); this.online=false; } }
     this.data={KRW:[],VND:[]};
   },
   rows(){ return this.data[active] || (this.data[active]=[]); },
 };
 function ensureIds(d){ for(const k in d)(d[k]||[]).forEach(r=>{ if(!r.id) r.id=uid(); }); }
 async function refresh(){
-  if(!BACKEND_URL) return;
+  if(!BACKEND_URL || !Auth.loggedIn) return;
   if(backdrop.classList.contains("show")) return;
-  try{ const d=await Store.fetchRemote(); if(d.error){ Store.online=false; Store.authError=true; updateSync(); return; } ensureIds(d); Store.data=d; Store.online=true; Store.authError=false; Store.lastSync=Date.now();
+  try{ const d=await Store.fetchRemote(); if(d.error){ Store.online=false; Store.authError=d.error==="forbidden"?"forbidden":"auth"; updateSync(); return; } if(d._user){ Auth.role=d._user.role; delete d._user; } ensureIds(d); Store.data=d; Store.online=true; Store.authError=false; Store.lastSync=Date.now();
        const y=window.scrollY; render(); window.scrollTo(0,y); }
   catch(e){ Store.online=false; updateSync(); }
 }
@@ -398,7 +463,8 @@ function rel(ts){ if(!ts) return L("syncWait"); const s=Math.floor((Date.now()-t
   if(s<10) return L("justNow"); if(s<60) return s+L("secAgo"); const m=Math.floor(s/60); if(m<60) return m+L("minAgo"); return Math.floor(m/60)+L("hrAgo"); }
 function updateSync(){ const el=$("#syncPill"), w=$("#syncWrap"); if(!el||!w) return;
   if(!BACKEND_URL){ w.className="brand-sub sync off"; el.textContent=L("noBackend"); }
-  else if(Store.authError){ w.className="brand-sub sync off"; el.textContent=L("authError"); }
+  else if(!Auth.loggedIn){ w.className="brand-sub sync off"; el.textContent=L("notLoggedIn"); }
+  else if(Store.authError){ w.className="brand-sub sync off"; el.textContent=Store.authError==="forbidden"?L("forbidden"):L("authError"); }
   else if(Store.online){ w.className="brand-sub sync live"; el.textContent=L("live")+rel(Store.lastSync); }
   else { w.className="brand-sub sync off"; el.textContent=L("disconnected"); }
 }
@@ -654,15 +720,68 @@ $("#btnExportJson").addEventListener("click",()=>{ download(`SMOS_backup_${new D
 /* ============================ Toast + init ============================ */
 let toastT; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2100); }
 let pollTimer=null;
-function startPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } if(BACKEND_URL && POLL_SECONDS>0) pollTimer=setInterval(()=>refresh(), POLL_SECONDS*1000); }
+function startPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } if(BACKEND_URL && Auth.loggedIn && POLL_SECONDS>0) pollTimer=setInterval(()=>refresh(), POLL_SECONDS*1000); }
 function openConnect(){
-  const statusMsg = !BACKEND_URL ? L("noBackend") : Store.authError ? L("authError") : Store.online ? L("connected") : L("disconnected");
+  const statusMsg = !BACKEND_URL ? L("noBackend") : !Auth.loggedIn ? L("notLoggedIn") : Store.authError==="forbidden" ? L("forbidden") : Store.authError ? L("authError") : Store.online ? L("connected") : L("disconnected");
   openModal(`<h2>${L("connectTitle")}</h2><div class="msub">${statusMsg}</div>
     <div class="modal-actions"><button class="cancel" data-close>${L("close")}</button></div>`);
   modal.querySelector("[data-close]").onclick=closeModal;
 }
 $("#syncWrap").addEventListener("click", openConnect);
-(async function(){ await Store.load(); render(); startPolling(); setInterval(updateSync, 15000); })();
+
+function showApp(){
+  $("#loginScreen").classList.add("hidden");
+  $("#appWrap").style.display="";
+  const pill=$("#userPill");
+  if(Auth.name){ pill.style.display=""; $("#userName").textContent=Auth.name; $("#userAvatar").src=Auth.picture||""; }
+}
+function hideApp(){
+  $("#loginScreen").classList.remove("hidden");
+  $("#appWrap").style.display="none";
+  $("#userPill").style.display="none";
+}
+function doLogout(){
+  Auth.clear();
+  Store.data={KRW:[],VND:[]}; Store.online=false; Store.authError=false;
+  if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+  google.accounts.id.disableAutoSelect();
+  hideApp();
+}
+$("#userPill").addEventListener("click", ()=>{
+  openModal(`<h2>${L("logout")}</h2><div class="msub">${Auth.email||""}</div>
+    <div class="modal-actions"><button class="cancel" data-close>${L("close")}</button><button class="save" id="btnLogoutConfirm">${L("logoutYes")}</button></div>`);
+  modal.querySelector("[data-close]").onclick=closeModal;
+  $("#btnLogoutConfirm").onclick=()=>{ closeModal(); doLogout(); };
+});
+
+async function onLogin(credential){
+  Auth.set(credential);
+  const errEl=$("#loginError");
+  errEl.classList.remove("show");
+  await Store.load();
+  if(Store.authError){
+    const msg = Store.authError==="forbidden" ? L("forbidden") : L("authError");
+    errEl.textContent=msg; errEl.classList.add("show");
+    Auth.clear();
+    return;
+  }
+  showApp(); render(); startPolling(); setInterval(updateSync, 15000);
+}
+
+function initGIS(){
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: (resp)=>{ if(resp.credential) onLogin(resp.credential); },
+    auto_select: true,
+  });
+  google.accounts.id.renderButton($("#gsiButtonWrap"),{type:"standard",theme:"outline",size:"large",text:"signin_with",shape:"pill",width:280});
+  google.accounts.id.prompt();
+}
+
+(function waitGIS(){
+  if(typeof google!=="undefined" && google.accounts && google.accounts.id){ initGIS(); }
+  else { setTimeout(waitGIS, 100); }
+})();
 </script>
 </body>
 </html>
