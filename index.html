@@ -631,7 +631,7 @@ function itemHTML(r){
           ${stepTag(r)}
           ${r.va?`<span class="va-flag va-yes" data-act="copy-va" data-va="${esc(r.va)}">VA ✓</span>`:``}
           ${reason?`<span class="reason-chip">${esc(reason)}</span>`:``}
-          ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>`<a class="url-chip" href="${esc(r[c.field])}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`).join("")}
+          ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>{const u=r[c.field],href=/^https?:\/\//i.test(u)?u:"https://"+u; return `<a class="url-chip" href="${esc(href)}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`;}).join("")}
         </div>
       </div>
       ${statusBadge(r.status)}
@@ -650,7 +650,7 @@ function detailRow(r,c){
   if(c.role==="status") return `<div class="d-item"><span class="d-key">${lbl}</span><span class="d-val">${statusBadge(r.status)}</span></div>`;
   if(!v) return "";
   let val;
-  if(c.type==="url") val=`<a class="link-btn" href="${esc(v)}" target="_blank" rel="noopener">${c.field==="ticket"||c.field==="jira"?L("ticket"):L("open")} ↗</a>`;
+  if(c.type==="url"){ const href=/^https?:\/\//i.test(v)?v:"https://"+v; val=`<a class="link-btn" href="${esc(href)}" target="_blank" rel="noopener">${c.field==="ticket"||c.field==="jira"?L("ticket"):L("open")} ↗</a>`; }
   else if(c.type==="reason") val=`<span class="reason-val">${esc(v)}</span>`;
   else if(c.type==="long") val=`<span class="memo-val">${esc(v)}</span>`;
   else if(c.type==="date"){ val=`<span class="mono">${esc(v)}</span>`; }
