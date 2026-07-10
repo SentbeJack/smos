@@ -200,8 +200,6 @@
     <div class="chips" id="chips"></div>
     <div class="toolbar">
       <button id="btnSort">↕ 최근순</button>
-      <button id="btnConnect">🔗 시트 연동</button>
-      <button id="btnImport">⤒ 가져오기 (CSV/JSON)</button>
       <button id="btnExportCsv">⤓ CSV 내보내기</button>
       <button id="btnExportJson">JSON 백업</button>
     </div>
@@ -211,10 +209,9 @@
 
 <div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>
-<input type="file" id="fileInput" accept=".csv,.json,application/json,text/csv" style="display:none">
 
 <script>
-let BACKEND_URL = "";
+let BACKEND_URL = "https://script.google.com/a/macros/sentbe.com/s/AKfycbzh8r4lGrqWZSBkr1kzQYYiD5wgjtnS4teI3D6EYNshD550ww_ktUG882fRzIpIeDmE/exec";
 const POLL_SECONDS = 30;
 
 const TONES = {
@@ -234,11 +231,13 @@ const STRINGS = {
     all:"전체",
     noResultTitle:"검색 결과가 없어요",
     noResultSub:"다른 조건으로 찾아보세요.",
-    noItemTitle:"등록된 항목이 없어요",
-    noItemSub:"데이터를 연동하세요.",
+    noItemTitle:"데이터를 불러올 수 없어요",
+    noItemSub:"백엔드가 연결되지 않았거나 접근 권한이 없습니다.",
     noName:"(이름 없음)",
     noGroup:"(미지정)",
     sample:"샘플 데이터 · 미연동",
+    noBackend:"백엔드 미연결",
+    authError:"접근 권한 없음 · @sentbe.com 계정 필요",
     live:"실시간 · ",
     disconnected:"연결 끊김 · 재시도 중",
     syncWait:"동기화 대기",
@@ -275,11 +274,13 @@ const STRINGS = {
     all:"All",
     noResultTitle:"No results found",
     noResultSub:"Try a different search.",
-    noItemTitle:"No items yet",
-    noItemSub:"Connect a data source.",
+    noItemTitle:"Unable to load data",
+    noItemSub:"Backend is not connected or access is unauthorized.",
     noName:"(unnamed)",
     noGroup:"(unassigned)",
     sample:"Sample data · Not connected",
+    noBackend:"Backend not connected",
+    authError:"Unauthorized · @sentbe.com account required",
     live:"Live · ",
     disconnected:"Disconnected · Retrying",
     syncWait:"Waiting to sync",
@@ -373,60 +374,15 @@ const CORRIDORS = {
   },
 };
 
-/* ---- Seed ---- */
-const J = id=>`https://example.atlassian.net/browse/${id}`;
-const SEED = {
-  KRW:[
-    {client:"Sunrate", name:"Weihai Shuangquan Import and Export Trade Co., Ltd", merchantId:"MCID000323", requestDate:"2026-05-15", ticket:J("COAS-1990"), status:"Succeeded", kybReason:"", va:"80012300000001", vaStatus:"발급 성공", note:""},
-    {client:"Sunrate", name:"SHANGHAI FEILANG HOVERCRAFT CO., LIMITED", merchantId:"MCID000314", requestDate:"2026-05-20", ticket:J("COAS-1941"), status:"Succeeded", kybReason:"", va:"80012300000002", vaStatus:"발급 성공", note:""},
-    {client:"Sunrate", name:"Hangzhou Mofang Youchuang Trading Co., Ltd.", merchantId:"MCID000324", requestDate:"2026-05-18", ticket:J("COAS-1994"), status:"Failed", kybReason:"Client-side Issue", va:"80012300000003", vaStatus:"발급 만료", note:"2000원 환급 필요"},
-    {client:"Sunrate", name:"Guangzhou Qixiang Apparel Co., Ltd.", merchantId:"MCID000332", requestDate:"2026-06-01", ticket:J("COAS-2095"), status:"Succeeded", kybReason:"", va:"80012300000004", vaStatus:"발급 성공", note:"MCID000333 미승인 → 000332 사용"},
-    {client:"Sunrate", name:"Shenzhen Chuangquan Electronics Co., Ltd.", merchantId:"MCID000318", requestDate:"2026-05-10", ticket:J("COAS-1976"), status:"Failed", kybReason:"Compliance Rejection", va:"80012300000005", vaStatus:"발급 성공", note:"5월 20 계정 정지, 환불 여부 확인 필요 (입금 내역 없음)"},
-    {client:"GEP", name:"HANG ZHOU MO FANG YOU CHUANG SHANG MAO CO., LTD", merchantId:"MCID000328", requestDate:"2026-05-25", ticket:J("COAS-2049"), status:"Failed", kybReason:"Client-side Issue", va:"", vaStatus:"", note:"Sunrate·Payful 사용 희망"},
-    {client:"Futurepay", name:"MOUNTSNEAKERS E-COMMERCE LIMITED", merchantId:"MCID000322", requestDate:"2026-05-12", ticket:J("COAS-1982"), status:"Failed", kybReason:"Client-side Issue", va:"", vaStatus:"", note:""},
-    {client:"GEP", name:"XIAN YOU XIAN SHU HUI BAIHUODIAN", merchantId:"MCID000313", requestDate:"2026-05-08", ticket:J("COAS-1926"), status:"Failed", kybReason:"Compliance Rejection", va:"", vaStatus:"", note:"5월 20 계정 정지, 환불 여부 확인 필요"},
-    {client:"Mdaq", name:"ZOCOCOON BUSINESS HONG KONG LIMITED", merchantId:"MCID000329", requestDate:"2026-06-05", ticket:J("COAS-2066"), status:"Failed", kybReason:"Compliance Rejection", va:"", vaStatus:"발급 취소완료", note:""},
-    {client:"Sunrate", name:"Little Panda E-commerce Limited", merchantId:"MCID000336", requestDate:"2026-06-10", ticket:J("COAS-2106"), status:"Succeeded", kybReason:"", va:"80012300000006", vaStatus:"발급 성공", note:""},
-    {client:"HONGKONG FORTUNETECH LIMITED", name:"Yezi International Trade Co., Ltd.", merchantId:"MCID000360", requestDate:"2026-04-28", ticket:J("COAS-2183"), status:"Failed", kybReason:"", va:"", vaStatus:"", note:"온보딩 요청 2개월 이상 — 거절"},
-    {client:"Pyvio", name:"BORVIA TRADING LIMITED", merchantId:"MCID000363", requestDate:"2026-04-25", ticket:J("COAS-2205"), status:"Failed", kybReason:"", va:"", vaStatus:"", note:"온보딩 요청 2개월 이상 — 거절"},
-    {client:"Sunrate", name:"Weihai Yicai Trading Co., Ltd.", merchantId:"MCID000367", requestDate:"2026-07-02", ticket:J("COAS-2236"), status:"KYC", kybReason:"", va:"", vaStatus:"", note:""},
-    {client:"Pyvio", name:"BS CULTURE ENTERTAINMENT LIMITED", merchantId:"MCID000377", requestDate:"2026-06-28", ticket:J("COAS-2271"), status:"Ops confirming", kybReason:"", va:"", vaStatus:"", note:""},
-    {client:"GEP", name:"QITIAN TRADE LIMITED", merchantId:"MCID000380", requestDate:"2026-06-30", ticket:J("COAS-2285"), status:"Ops confirming", kybReason:"", va:"", vaStatus:"", note:""},
-    {client:"Sunrate", name:"QICAIJIAJU LIMITED COMPANY", merchantId:"MCID000391", requestDate:"2026-07-05", ticket:J("COAS-2315"), status:"KYC", kybReason:"", va:"", vaStatus:"", note:""},
-    {client:"Sunrate", name:"TIANHUI JUNHE (HK) HOLDING CO., LIMITED", merchantId:"MCID000397", requestDate:"2026-06-20", ticket:J("COAS-2349"), status:"Failed", kybReason:"Compliance Rejection", va:"", vaStatus:"", note:"성인용품 취급 회사로 서비스 거절"},
-    {client:"Mdaq", name:"NORDIC NATURAL RESOURCES LTD", merchantId:"MCID000386", requestDate:"2026-06-12", ticket:J("COAS-2305"), status:"Succeeded", kybReason:"", va:"", vaStatus:"", note:"조건부 승인"},
-    {client:"Sunrate", name:"Xiamen Kairuiding Network Technology Co., Ltd.", merchantId:"MCID000378", requestDate:"2026-06-15", ticket:J("COAS-2296"), status:"Succeeded", kybReason:"", va:"", vaStatus:"", note:""},
-    {client:"", name:"Qingdao Talelor International Trading", merchantId:"", requestDate:"2026-07-04", ticket:J("COAS-2346"), status:"KYC", kybReason:"", va:"", vaStatus:"", note:""},
-  ],
-  VND:[
-    {merchantId:"VN005", name:"Zhongshan Zhetai Trading Co., Ltd.", fiMerchant:"MDAQ", fiPartner:"H-PAY", requestDate:"2026-06-10", status:"Approved", va:"9900100000000000101", vaDate:"2026-06-24", kycDate:"2026-07-02", jira:""},
-    {merchantId:"VN052", name:"Hekou Gedeng Cross border E-commerce Co., Ltd", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9900100000000000102", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
-    {merchantId:"VN053", name:"Ebuy1688 Trading Limited", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9900100000000000103", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN054", name:"HK YIDING GLOBAL TRADING LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-14", status:"Approved", va:"9900100000000000104", vaDate:"2026-06-24", kycDate:"2026-06-30", jira:""},
-    {merchantId:"VN056", name:"Hekou Xindongjin Cross border E-commerce Co., Ltd", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-05", status:"Approved", va:"9900100000000000105", vaDate:"2026-06-16", kycDate:"", jira:""},
-    {merchantId:"VN057", name:"CHENYIN TRADING LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9900100000000000106", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
-    {merchantId:"VN058", name:"DONG XING SHI CHANG SHUN MAO YI CO., LTD", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9900100000000000107", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
-    {merchantId:"VN059", name:"ASIA CITIC GROUP LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-12", status:"Approved", va:"9900100000000000108", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
-    {merchantId:"VN060", name:"CLOUD WAVE (HONG KONG) LIMITED", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9900100000000000109", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN061", name:"MF Trading Limited", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9900100000000000110", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN065", name:"GUANGXI TENGYU SUPPLY CHAIN CO., LTD.", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-14", status:"Approved", va:"9900100000000000111", vaDate:"2026-06-24", kycDate:"2026-07-01", jira:""},
-    {merchantId:"VN070", name:"Sanhe City E-Commerce Co., Ltd.", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9900100000000000112", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN074", name:"HONG KONG GMS GROUP LIMITED", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-04", status:"Approved", va:"9900100000000000113", vaDate:"2026-06-23", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN081", name:"J. T. ENGINEERING MANAGEMENT COMPANY LIMITED", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-08", status:"Approved", va:"9900100000000000114", vaDate:"2026-06-24", kycDate:"2026-06-17", jira:""},
-    {merchantId:"VN082", name:"Lanan Media Limited", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-08", status:"Approved", va:"9900100000000000115", vaDate:"2026-06-24", kycDate:"2026-06-17", jira:""},
-    {merchantId:"VN086", name:"HEKOU JIUTAI INTERNATIONAL SUPPLY CHAIN MANAGEMENT CO., LTD", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9900100000000000116", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN098", name:"Miji Infrastructure Technical Service Company Limited", fiMerchant:"GEP", fiPartner:"H-PAY", requestDate:"2026-06-02", status:"Approved", va:"9900100000000000117", vaDate:"2026-06-16", kycDate:"2026-06-11", jira:""},
-    {merchantId:"VN099", name:"SENDIT TECHNOLOGY LIMITED", fiMerchant:"Direct-Merchant", fiPartner:"H-PAY", requestDate:"2026-06-25", status:"Rejected / Offboarded", va:"", vaDate:"", kycDate:"2026-07-01", jira:""},
-  ],
-};
+/* SEED 데이터 없음 — 모든 데이터는 Apps Script 백엔드에서만 불러옵니다 */
 
 /* ============================ Data layer ============================ */
 const Store = {
-  data:{KRW:[],VND:[]}, online:false, lastSync:null,
+  data:{KRW:[],VND:[]}, online:false, authError:false, lastSync:null,
   async fetchRemote(){ const r=await fetch(BACKEND_URL,{cache:"no-store"}); if(!r.ok) throw new Error("http "+r.status); return await r.json(); },
   async load(){
-    if(BACKEND_URL){ try{ this.data=await this.fetchRemote(); this.online=true; this.lastSync=Date.now(); ensureIds(this.data); return; }catch(e){ console.warn("backend load failed, using seed",e); this.online=false; } }
-    this.data = JSON.parse(JSON.stringify(SEED)); ensureIds(this.data);
+    if(BACKEND_URL){ try{ const d=await this.fetchRemote(); if(d.error){ console.warn("backend auth error:",d.message); this.online=false; this.authError=true; return; } this.data=d; this.online=true; this.authError=false; this.lastSync=Date.now(); ensureIds(this.data); return; }catch(e){ console.warn("backend load failed",e); this.online=false; } }
+    this.data={KRW:[],VND:[]};
   },
   rows(){ return this.data[active] || (this.data[active]=[]); },
 };
@@ -434,14 +390,15 @@ function ensureIds(d){ for(const k in d)(d[k]||[]).forEach(r=>{ if(!r.id) r.id=u
 async function refresh(){
   if(!BACKEND_URL) return;
   if(backdrop.classList.contains("show")) return;
-  try{ const d=await Store.fetchRemote(); ensureIds(d); Store.data=d; Store.online=true; Store.lastSync=Date.now();
+  try{ const d=await Store.fetchRemote(); if(d.error){ Store.online=false; Store.authError=true; updateSync(); return; } ensureIds(d); Store.data=d; Store.online=true; Store.authError=false; Store.lastSync=Date.now();
        const y=window.scrollY; render(); window.scrollTo(0,y); }
   catch(e){ Store.online=false; updateSync(); }
 }
 function rel(ts){ if(!ts) return L("syncWait"); const s=Math.floor((Date.now()-ts)/1000);
   if(s<10) return L("justNow"); if(s<60) return s+L("secAgo"); const m=Math.floor(s/60); if(m<60) return m+L("minAgo"); return Math.floor(m/60)+L("hrAgo"); }
 function updateSync(){ const el=$("#syncPill"), w=$("#syncWrap"); if(!el||!w) return;
-  if(!BACKEND_URL){ w.className="brand-sub sync"; el.textContent=L("sample"); }
+  if(!BACKEND_URL){ w.className="brand-sub sync off"; el.textContent=L("noBackend"); }
+  else if(Store.authError){ w.className="brand-sub sync off"; el.textContent=L("authError"); }
   else if(Store.online){ w.className="brand-sub sync live"; el.textContent=L("live")+rel(Store.lastSync); }
   else { w.className="brand-sub sync off"; el.textContent=L("disconnected"); }
 }
@@ -542,8 +499,6 @@ function render(){
   const sortBtn=$("#btnSort");
   sortBtn.textContent = sortMode==="recent"?L("sortRecent"):L("sortGroup");
   sortBtn.classList.toggle("sort-on", sortMode==="recent");
-  $("#btnConnect").textContent = L("btnConnect");
-  $("#btnImport").textContent = L("btnImport");
   $("#btnExportCsv").textContent = L("btnExportCsv");
   $("#btnExportJson").textContent = L("btnExportJson");
   renderTabs(); renderChips(); updateSync();
@@ -685,43 +640,6 @@ backdrop.addEventListener("click",e=>{ if(e.target===backdrop)closeModal(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape")closeModal(); });
 
 /* ============================ Import / Export ============================ */
-$("#btnConnect").addEventListener("click", openConnect);
-$("#btnImport").addEventListener("click",()=>$("#fileInput").click());
-$("#fileInput").addEventListener("change",e=>{
-  const f=e.target.files[0]; if(!f)return;
-  const rd=new FileReader();
-  rd.onload=()=>{
-    try{
-      if(/\.json$/i.test(f.name)){ Store.data=JSON.parse(rd.result); for(const k in Store.data)(Store.data[k]||[]).forEach(r=>{if(!r.id)r.id=uid();}); render(); toast(L("jsonImported")); }
-      else { const n=importCSV(rd.result); render(); toast(`${active} ${n}${L("importDone")}`); }
-    }catch(err){ console.error(err); toast(L("importFail")); }
-  };
-  rd.readAsText(f); e.target.value="";
-});
-function normHeader(h){ return String(h).toLowerCase().replace(/\(for tracking\)/g,"").replace(/[-\s]+/g," ").trim(); }
-function importCSV(text){
-  const rows=parseCSV(text).filter(r=>r.some(c=>String(c).trim()!==""));
-  if(!rows.length) return 0;
-  const headers=rows[0].map(normHeader);
-  const map={}; CORR().columns.forEach(c=>{ const idx=headers.indexOf(normHeader(c.header)); if(idx>=0) map[c.field]=idx; });
-  const out=[];
-  for(let i=1;i<rows.length;i++){
-    const cells=rows[i]; const o={id:uid()};
-    let has=false;
-    CORR().columns.forEach(c=>{ if(map[c.field]!=null){ const v=(cells[map[c.field]]||"").trim(); o[c.field]=v; if(v)has=true; } });
-    if(has && (o[nameField()]||o.merchantId)) out.push(o);
-  }
-  Store.data[active]=out; return out.length;
-}
-function parseCSV(text){
-  const rows=[]; let row=[],cur="",q=false;
-  for(let i=0;i<text.length;i++){ const c=text[i];
-    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
-    else{ if(c==='"')q=true; else if(c===',' ){row.push(cur);cur="";} else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur="";} else if(c==='\r'){} else cur+=c; }
-  }
-  if(cur!==""||row.length){ row.push(cur); rows.push(row); }
-  return rows;
-}
 function toCSV(){
   const cols=CORR().columns;
   const q=v=>{ v=String(v??""); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
@@ -738,17 +656,10 @@ let toastT; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList
 let pollTimer=null;
 function startPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } if(BACKEND_URL && POLL_SECONDS>0) pollTimer=setInterval(()=>refresh(), POLL_SECONDS*1000); }
 function openConnect(){
-  openModal(`<h2>${L("connectTitle")}</h2><div class="msub">${L("connectSub")}</div>
-    <div class="field"><label>Web App URL</label><input type="url" id="f_url" value="${esc(BACKEND_URL)}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></div>
-    <div class="modal-actions"><button class="cancel" data-close>${L("close")}</button><button class="save" id="connBtn">${BACKEND_URL?L("reconnect"):L("connect")}</button></div>
-    ${BACKEND_URL?`<button id="disconnBtn" style="margin-top:10px;width:100%;border:1px solid var(--border-strong);background:var(--surface);color:var(--s-rej-t);font:inherit;font-weight:600;font-size:13px;padding:11px;border-radius:11px;cursor:pointer">${L("disconnect")}</button>`:""}`);
+  const statusMsg = !BACKEND_URL ? L("noBackend") : Store.authError ? L("authError") : Store.online ? L("connected") : L("disconnected");
+  openModal(`<h2>${L("connectTitle")}</h2><div class="msub">${statusMsg}</div>
+    <div class="modal-actions"><button class="cancel" data-close>${L("close")}</button></div>`);
   modal.querySelector("[data-close]").onclick=closeModal;
-  $("#connBtn").onclick=async ()=>{ const u=$("#f_url").value.trim(); if(!u){ $("#f_url").focus(); return; }
-    BACKEND_URL=u; toast(L("connecting")); await Store.load();
-    if(Store.online){ closeModal(); render(); startPolling(); toast(L("connected")); }
-    else { render(); toast(L("connectFail")); } };
-  const db=$("#disconnBtn"); if(db) db.onclick=async ()=>{ BACKEND_URL=""; startPolling(); await Store.load(); closeModal(); render(); toast(L("toSample")); };
-  $("#f_url").focus();
 }
 $("#syncWrap").addEventListener("click", openConnect);
 (async function(){ await Store.load(); render(); startPolling(); setInterval(updateSync, 15000); })();
