@@ -195,6 +195,48 @@
   .user-pill:hover{border-color:var(--accent);}
   .user-pill img{width:24px; height:24px; border-radius:50%;}
   .user-pill span{font-size:12px; font-weight:600; color:var(--ink-2); max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  .empty{text-align:center; padding:60px 20px; color:var(--muted);}
+  .empty .big{font-size:16px; font-weight:700; color:var(--ink-2); margin-bottom:6px;}
+  .empty .sm{font-size:13px;}
+
+  .theme-toggle{width:32px; height:32px; border:1px solid var(--border-strong); background:var(--surface); border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--ink-2); transition:all .15s; flex:none; touch-action:manipulation;}
+  .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
+
+  .toolbar button.dash-on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .dash{flex:1; padding:14px 16px calc(env(safe-area-inset-bottom) + 24px);}
+  .dash-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px; margin-bottom:12px; box-shadow:var(--shadow);}
+  .dash-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .dash-title{font-size:14px; font-weight:700; letter-spacing:-.01em;}
+  .dash-sub{font-size:11px; color:var(--muted); font-family:var(--mono);}
+  .dash-bar-row{display:flex; align-items:center; gap:10px; margin-bottom:7px;}
+  .dash-bar-label{font-size:11.5px; font-weight:600; color:var(--ink-2); width:72px; flex:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .dash-bar-track{flex:1; height:20px; background:var(--surface-2); border-radius:6px; overflow:hidden;}
+  .dash-bar-fill{height:100%; border-radius:6px; min-width:2px;}
+  .dash-bar-val{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted); flex:none; min-width:24px; text-align:right;}
+  .dash-chart{width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;}
+  .dash-chart svg{display:block; width:100%; height:auto;}
+  .dash-legend{display:flex; gap:14px; margin-top:10px; font-size:11px; color:var(--muted);}
+  .dash-legend i{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:4px; vertical-align:-1px;}
+
+  [data-theme="dark"]{
+    --bg:#0F1219; --surface:#1A1E2E; --surface-2:#222738;
+    --border:#2E3450; --border-strong:#3D4568;
+    --ink:#E2E6F3; --ink-2:#A0AACC; --muted:#6874A0;
+    --accent:#6EA8FF; --accent-2:#4B88EF; --accent-tint:#172040;
+    --shadow:0 1px 3px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+    --shadow-lg:0 12px 40px rgba(0,0,0,.5);
+    --s-recv-t:#8BB8FE; --s-recv-b:#172040; --s-recv-d:#6EA8FF;
+    --s-rev-t:#F2CB5A;  --s-rev-b:#2C2510;  --s-rev-d:#D99A0B;
+    --s-vaw-t:#F49662;  --s-vaw-b:#2C1C12;  --s-vaw-d:#EA6A1C;
+    --s-vac-t:#6EA8FF;  --s-vac-b:#172040;  --s-vac-d:#3176FD;
+    --s-live-t:#58E8A8;  --s-live-b:#122C22;  --s-live-d:#00C592;
+    --s-rej-t:#F47868;  --s-rej-b:#2C1818;  --s-rej-d:#E5533F;
+  }
+  [data-theme="dark"] header{background:rgba(15,18,25,.92);}
+  [data-theme="dark"] .chip.on, [data-theme="dark"] .tabs button.on, [data-theme="dark"] .lang-toggle button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  [data-theme="dark"] .chip.on .cnt{color:rgba(255,255,255,.7);}
+  [data-theme="dark"] .group-head:active, [data-theme="dark"] .item-row:active{background:#2A2E40;}
 </style>
 </head>
 <body>
@@ -218,6 +260,7 @@
         <div class="user-pill" id="userPill" style="display:none;" title="로그아웃">
           <img id="userAvatar" src="" alt=""><span id="userName"></span>
         </div>
+        <button class="theme-toggle" id="themeToggle" title="테마 전환"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
         <div class="lang-toggle" id="langToggle">
           <button data-lang="KR" class="on">한국어</button>
           <button data-lang="EN">EN</button>
@@ -231,12 +274,14 @@
     </div>
     <div class="chips" id="chips"></div>
     <div class="toolbar">
+      <button id="btnDashboard">📊 대시보드</button>
       <button id="btnSort">↕ 최근순</button>
       <button id="btnExportCsv">⤓ CSV 내보내기</button>
       <button id="btnExportJson">JSON 백업</button>
     </div>
   </header>
   <main id="list"></main>
+  <div class="dash" id="dashboard" style="display:none"></div>
 </div>
 
 <div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
@@ -327,6 +372,9 @@ const STRINGS = {
     shareLabel:"📋 공유용 복사",
     summaryCopied:"현황 요약이 복사됐어요",
     vaIssued:"VA 발급",
+    dashboard:"대시보드", dashWeekly:"주간 누적 인입", dashMonthly:"월별 인입",
+    dashClient:"클라이언트별 인입", dashNew:"신규", dashCum:"누적",
+    dashNoDate:"날짜 없는 항목 제외",
   },
   EN:{
     title:"Onboarding Status",
@@ -375,6 +423,9 @@ const STRINGS = {
     shareLabel:"📋 Copy summary",
     summaryCopied:"Summary copied",
     vaIssued:"VA issued",
+    dashboard:"Dashboard", dashWeekly:"Weekly Cumulative Intake", dashMonthly:"Monthly Intake",
+    dashClient:"Intake by Client", dashNew:"New", dashCum:"Cumulative",
+    dashNoDate:"Items without dates excluded",
   },
 };
 let lang = "KR";
@@ -546,6 +597,8 @@ let active = "KRW";
 let filter = "all";
 let query = "";
 let sortMode = "group";
+let dashMode = false;
+let darkTheme = false;
 const openGroups = new Set();
 const openItems = new Set();
 
@@ -567,7 +620,9 @@ function render(){
   sortBtn.classList.toggle("sort-on", sortMode==="recent");
   $("#btnExportCsv").textContent = L("btnExportCsv");
   $("#btnExportJson").textContent = L("btnExportJson");
+  const db=$("#btnDashboard"); db.textContent="📊 "+L("dashboard"); db.classList.toggle("dash-on",dashMode);
   renderTabs(); renderChips(); updateSync();
+  if(dashMode){ renderDash(); return; }
 
   const rows = Store.rows().filter(matchRow);
   const gf=groupField(), nf=nameField();
@@ -681,7 +736,7 @@ function renderChips(){
 
 /* ============================ Events ============================ */
 $("#langToggle").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; lang=b.dataset.lang; [...$("#langToggle").children].forEach(x=>x.classList.toggle("on",x===b)); document.documentElement.lang=lang==="EN"?"en":"ko"; render(); });
-$("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; active=b.dataset.tab; filter="all"; query=""; $("#search").value=""; render(); });
+$("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; active=b.dataset.tab; filter="all"; query=""; $("#search").value=""; render(); if(dashMode) renderDash(); });
 $("#search").addEventListener("input",e=>{ query=e.target.value.trim(); render(); });
 $("#chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b)return; filter=b.dataset.filter; render(); });
 $("#btnSort").addEventListener("click",()=>{ sortMode=sortMode==="group"?"recent":"group"; render(); });
@@ -705,6 +760,118 @@ function closeModal(){ backdrop.classList.remove("show"); }
 backdrop.addEventListener("click",e=>{ if(e.target===backdrop)closeModal(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape")closeModal(); });
 
+/* ============================ Theme ============================ */
+$("#themeToggle").addEventListener("click",()=>{
+  darkTheme=!darkTheme;
+  document.documentElement.setAttribute("data-theme", darkTheme?"dark":"");
+  $("#themeToggle").innerHTML=darkTheme
+    ?'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>'
+    :'<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 9A6 6 0 117 2a6 6 0 007 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+});
+(function(){
+  $("#themeToggle").innerHTML='<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 9A6 6 0 117 2a6 6 0 007 7z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+})();
+
+/* ============================ Dashboard ============================ */
+$("#btnDashboard").addEventListener("click",()=>{
+  dashMode=!dashMode;
+  $("#list").style.display=dashMode?"none":"";
+  $("#dashboard").style.display=dashMode?"":"none";
+  $("#btnDashboard").classList.toggle("dash-on",dashMode);
+  if(dashMode) renderDash(); else render();
+});
+
+function isoWeekStart(d){
+  const dt=new Date(d); const day=dt.getDay();
+  dt.setDate(dt.getDate()-((day+6)%7));
+  return dt.toISOString().slice(0,10);
+}
+
+function renderDash(){
+  const rows=Store.rows(), gf=groupField();
+  const dated=rows.filter(r=>r.requestDate).map(r=>({r,d:new Date(r.requestDate)})).filter(x=>!isNaN(x.d));
+  const weekMap={};
+  dated.forEach(x=>{const k=isoWeekStart(x.d);weekMap[k]=(weekMap[k]||0)+1;});
+  const weeks=Object.keys(weekMap).sort();
+  const weekData=weeks.map(w=>({week:w,count:weekMap[w]}));
+  let cum=0; weekData.forEach(w=>{cum+=w.count; w.cum=cum;});
+
+  const monthMap={};
+  dated.forEach(x=>{const k=x.r.requestDate.slice(0,7);monthMap[k]=(monthMap[k]||0)+1;});
+  const months=Object.keys(monthMap).sort();
+  const monthData=months.map(m=>({month:m,count:monthMap[m]}));
+
+  const clientMap={};
+  rows.forEach(r=>{const g=r[gf]||L("noGroup");clientMap[g]=(clientMap[g]||0)+1;});
+  const clients=Object.entries(clientMap).map(([n,c])=>({name:n,count:c})).sort((a,b)=>b.count-a.count);
+
+  let h='';
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashWeekly")}</div><div class="dash-sub">${dated.length} / ${rows.length}</div></div>`;
+  if(weekData.length){
+    h+=renderWeeklyChart(weekData);
+    h+=`<div class="dash-legend"><span><i style="background:var(--accent-tint);border:1px solid var(--accent)"></i>${L("dashNew")}</span><span><i style="background:var(--s-live-d)"></i>${L("dashCum")}</span></div>`;
+  } else { h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`; }
+  h+='</div>';
+
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashMonthly")}</div></div>`;
+  const maxM=Math.max(...monthData.map(m=>m.count),1);
+  monthData.slice().reverse().forEach(m=>{
+    const p=Math.round(m.count/maxM*100);
+    h+=`<div class="dash-bar-row"><span class="dash-bar-label">${m.month}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${p}%;background:var(--accent)"></div></div><span class="dash-bar-val">${m.count}</span></div>`;
+  });
+  if(!monthData.length) h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`;
+  h+='</div>';
+
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashClient")}</div></div>`;
+  const maxC=Math.max(...clients.map(c=>c.count),1);
+  clients.forEach(c=>{
+    const p=Math.round(c.count/maxC*100);
+    h+=`<div class="dash-bar-row"><span class="dash-bar-label" title="${esc(c.name)}">${esc(c.name)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${p}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val">${c.count}</span></div>`;
+  });
+  h+='</div>';
+
+  $("#dashboard").innerHTML=h;
+}
+
+function renderWeeklyChart(data){
+  const W=560,H=200,pad={t:24,r:10,b:38,l:36};
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const n=data.length;
+  const barW=Math.min(Math.floor(cw/n*0.6),36);
+  const gap=(cw-barW*n)/(n+1);
+  const maxY=Math.max(...data.map(d=>d.cum),1);
+  const gridN=4;
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  for(let i=0;i<=gridN;i++){
+    const y=pad.t+ch-(ch/gridN*i), v=Math.round(maxY/gridN*i);
+    s+=`<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+    s+=`<text x="${pad.l-6}" y="${y+3}" text-anchor="end" fill="var(--muted)" font-size="9" font-family="var(--mono)">${v}</text>`;
+  }
+  data.forEach((d,i)=>{
+    const x=pad.l+gap+i*(barW+gap);
+    const bH=Math.max((d.count/maxY)*ch,2);
+    const y=pad.t+ch-bH;
+    s+=`<rect x="${x}" y="${y}" width="${barW}" height="${bH}" rx="3" fill="var(--accent-tint)" stroke="var(--accent)" stroke-width="0.8"/>`;
+    s+=`<text x="${x+barW/2}" y="${pad.t+ch-bH-4}" text-anchor="middle" fill="var(--accent)" font-size="8" font-weight="700" font-family="var(--mono)">${d.count}</text>`;
+    const lbl=d.week.slice(5);
+    s+=`<text x="${x+barW/2}" y="${H-pad.b+14}" text-anchor="middle" fill="var(--muted)" font-size="8" font-family="var(--mono)">${lbl}</text>`;
+  });
+  const pts=data.map((d,i)=>{
+    const x=pad.l+gap+i*(barW+gap)+barW/2;
+    const y=pad.t+ch-(d.cum/maxY)*ch;
+    return `${x},${y}`;
+  }).join(' ');
+  s+=`<polyline points="${pts}" fill="none" stroke="var(--s-live-d)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  data.forEach((d,i)=>{
+    const x=pad.l+gap+i*(barW+gap)+barW/2;
+    const y=pad.t+ch-(d.cum/maxY)*ch;
+    s+=`<circle cx="${x}" cy="${y}" r="3" fill="var(--surface)" stroke="var(--s-live-d)" stroke-width="1.5"/>`;
+    if(i===n-1||n<=12) s+=`<text x="${x}" y="${y-8}" text-anchor="middle" fill="var(--s-live-t)" font-size="9" font-weight="700" font-family="var(--mono)">${d.cum}</text>`;
+  });
+  s+='</svg>';
+  return `<div class="dash-chart">${s}</div>`;
+}
+
 /* ============================ Import / Export ============================ */
 function toCSV(){
   const cols=CORR().columns;
@@ -719,7 +886,7 @@ $("#btnExportJson").addEventListener("click",()=>{ download(`SMOS_backup_${new D
 
 /* ============================ Toast + init ============================ */
 let toastT; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2100); }
-let pollTimer=null;
+let pollTimer=null; let syncTimer=null;
 function startPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } if(BACKEND_URL && Auth.loggedIn && POLL_SECONDS>0) pollTimer=setInterval(()=>refresh(), POLL_SECONDS*1000); }
 function openConnect(){
   const statusMsg = !BACKEND_URL ? L("noBackend") : !Auth.loggedIn ? L("notLoggedIn") : Store.authError==="forbidden" ? L("forbidden") : Store.authError ? L("authError") : Store.online ? L("connected") : L("disconnected");
@@ -744,6 +911,7 @@ function doLogout(){
   Auth.clear();
   Store.data={KRW:[],VND:[]}; Store.online=false; Store.authError=false;
   if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+  if(syncTimer){ clearInterval(syncTimer); syncTimer=null; }
   google.accounts.id.disableAutoSelect();
   hideApp();
 }
@@ -765,7 +933,7 @@ async function onLogin(credential){
     Auth.clear();
     return;
   }
-  showApp(); render(); startPolling(); setInterval(updateSync, 15000);
+  showApp(); render(); startPolling(); if(syncTimer) clearInterval(syncTimer); syncTimer=setInterval(updateSync, 15000);
 }
 
 function initGIS(){
