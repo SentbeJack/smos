@@ -376,6 +376,7 @@ const STRINGS = {
     dashClient:"클라이언트별 인입", dashNew:"신규", dashCum:"누적",
     dashNoDate:"날짜 없는 항목 제외",
     dashApproval:"온보딩 승인률 (인입월 기준)", dashApproved:"승인",
+    dashApprovalByClient:"클라이언트별 승인률",
   },
   EN:{
     title:"Onboarding Status",
@@ -428,6 +429,7 @@ const STRINGS = {
     dashClient:"Intake by Client", dashNew:"New", dashCum:"Cumulative",
     dashNoDate:"Items without dates excluded",
     dashApproval:"Onboarding Approval Rate (by intake month)", dashApproved:"Approved",
+    dashApprovalByClient:"Approval Rate by Client",
   },
 };
 let lang = "KR";
@@ -814,6 +816,9 @@ function renderDash(){
   const apM={};
   dated.forEach(x=>{const k=x.r.requestDate.slice(0,7);const o=apM[k]||(apM[k]={t:0,a:0});o.t++;if(isAppr(x.r))o.a++;});
   const apMonths=Object.keys(apM).sort();
+  const apC={};
+  rows.forEach(r=>{const g=r[gf]||L("noGroup");const o=apC[g]||(apC[g]={t:0,a:0});o.t++;if(isAppr(r))o.a++;});
+  const apClients=Object.entries(apC).map(([n,o])=>({name:n,rate:o.t?Math.round(o.a/o.t*100):0,a:o.a,t:o.t})).sort((x,y)=>y.rate-x.rate||y.t-x.t);
 
   let h='';
   h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApproval")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
@@ -823,6 +828,13 @@ function renderDash(){
       h+=`<div class="dash-bar-row"><span class="dash-bar-label">${m}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${rate}% <span style="color:var(--muted);font-weight:500">${o.a}/${o.t}</span></span></div>`;
     });
   } else { h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`; }
+  h+='</div>';
+
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApprovalByClient")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
+  apClients.forEach(c=>{
+    h+=`<div class="dash-bar-row"><span class="dash-bar-label" title="${esc(c.name)}">${esc(c.name)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${c.rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${c.rate}% <span style="color:var(--muted);font-weight:500">${c.a}/${c.t}</span></span></div>`;
+  });
+  if(!apClients.length) h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`;
   h+='</div>';
 
   h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashWeekly")}</div><div class="dash-sub">${dated.length} / ${rows.length}</div></div>`;
