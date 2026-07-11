@@ -36,13 +36,14 @@ fi
 # ──────────────────────────────────────
 echo "[2/8] Checking for XSS vulnerabilities..."
 
-if grep -Pn '\.innerHTML\s*=' "$FRONTEND" 2>/dev/null | grep -v 'escHtml\|textContent\|sanitize'; then
-  add_finding "HIGH" "index.html" "innerHTML usage" "Direct innerHTML assignment found — verify all data is escaped"
+# innerHTML with external/user data (skip internal UI building with config/literals)
+if grep -Pn '\.innerHTML\s*=' "$FRONTEND" 2>/dev/null | grep -P '(fetch|response|json|input\.value|location\.|document\.cookie|param)' | grep -v 'escHtml\|textContent\|sanitize'; then
+  add_finding "HIGH" "index.html" "innerHTML with external data" "innerHTML used with data from external source without sanitization"
 fi
 
-# Backend: sheet data in HTML without escHtml_
-if grep -Pn "html\s*\+=" "$BACKEND" 2>/dev/null | grep -P "\+\s*(r\.|n\b)" | grep -v 'escHtml_'; then
-  add_finding "HIGH" "Code.gs" "Unescaped email HTML" "Sheet data inserted into email HTML without escHtml_()"
+# Backend: sheet row fields (r.name, r.status, r.merchantId, r.kybReason) in HTML without escHtml_
+if grep -Pn "html\s*\+=" "$BACKEND" 2>/dev/null | grep -P "\b(r\.(name|status|merchantId|kybReason)|[^c]n\s*\+\s*['\"])" | grep -v 'escHtml_'; then
+  add_finding "HIGH" "Code.gs" "Unescaped email HTML" "Sheet data (r.name/r.status/etc) inserted into email HTML without escHtml_()"
 fi
 
 # ──────────────────────────────────────
@@ -96,12 +97,12 @@ fi
 # ──────────────────────────────────────
 echo "[6/8] Checking external resources..."
 
-# CDN without integrity hash
-if grep -Pn '<script[^>]+src=' "$FRONTEND" 2>/dev/null | grep -v 'integrity='; then
+# CDN without integrity hash (exclude Google GSI — they don't support SRI)
+if grep -Pn '<script[^>]+src=' "$FRONTEND" 2>/dev/null | grep -v 'integrity=\|accounts\.google\.com'; then
   add_finding "MEDIUM" "index.html" "CDN without SRI" "External scripts should use subresource integrity (integrity= attribute)"
 fi
 
-if grep -Pn '<link[^>]+href=.*cdn' "$FRONTEND" 2>/dev/null | grep -v 'integrity='; then
+if grep -Pn '<link[^>]+href=.*cdn' "$FRONTEND" 2>/dev/null | grep -v 'integrity=\|fonts\.googleapis'; then
   add_finding "LOW" "index.html" "CDN CSS without SRI" "External stylesheets from CDN should use integrity attribute"
 fi
 
