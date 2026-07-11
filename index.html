@@ -375,6 +375,7 @@ const STRINGS = {
     dashboard:"대시보드", dashWeekly:"주간 누적 인입", dashMonthly:"월별 인입",
     dashClient:"클라이언트별 인입", dashNew:"신규", dashCum:"누적",
     dashNoDate:"날짜 없는 항목 제외",
+    dashApproval:"온보딩 승인률 (인입월 기준)", dashApproved:"승인",
   },
   EN:{
     title:"Onboarding Status",
@@ -426,6 +427,7 @@ const STRINGS = {
     dashboard:"Dashboard", dashWeekly:"Weekly Cumulative Intake", dashMonthly:"Monthly Intake",
     dashClient:"Intake by Client", dashNew:"New", dashCum:"Cumulative",
     dashNoDate:"Items without dates excluded",
+    dashApproval:"Onboarding Approval Rate (by intake month)", dashApproved:"Approved",
   },
 };
 let lang = "KR";
@@ -805,7 +807,24 @@ function renderDash(){
   rows.forEach(r=>{const g=r[gf]||L("noGroup");clientMap[g]=(clientMap[g]||0)+1;});
   const clients=Object.entries(clientMap).map(([n,c])=>({name:n,count:c})).sort((a,b)=>b.count-a.count);
 
+  const success=CORR().success||[];
+  const isAppr=r=>success.indexOf(r.status)>=0;
+  const apprAll=rows.filter(isAppr).length;
+  const rateAll=rows.length?Math.round(apprAll/rows.length*100):0;
+  const apM={};
+  dated.forEach(x=>{const k=x.r.requestDate.slice(0,7);const o=apM[k]||(apM[k]={t:0,a:0});o.t++;if(isAppr(x.r))o.a++;});
+  const apMonths=Object.keys(apM).sort();
+
   let h='';
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApproval")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
+  if(apMonths.length){
+    apMonths.slice().reverse().forEach(m=>{
+      const o=apM[m], rate=o.t?Math.round(o.a/o.t*100):0;
+      h+=`<div class="dash-bar-row"><span class="dash-bar-label">${m}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${rate}% <span style="color:var(--muted);font-weight:500">${o.a}/${o.t}</span></span></div>`;
+    });
+  } else { h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`; }
+  h+='</div>';
+
   h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashWeekly")}</div><div class="dash-sub">${dated.length} / ${rows.length}</div></div>`;
   if(weekData.length){
     h+=renderWeeklyChart(weekData);
