@@ -278,6 +278,7 @@
       <button id="btnSort">↕ 최근순</button>
       <button id="btnExportCsv">⤓ CSV 내보내기</button>
       <button id="btnExportJson">JSON 백업</button>
+      <button id="btnWeeklyReport">📧 주간 보고</button>
     </div>
   </header>
   <main id="list"></main>
@@ -288,7 +289,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-let BACKEND_URL = "https://script.google.com/macros/s/AKfycbyC5Nl987eHxWrpqISguPfOGvgVVMKoKP2HXpxznla00xTUflpRt0I8k5D31e8Of3fGow/exec";
+let BACKEND_URL = "https://script.google.com/macros/s/AKfycbzjB6OihUYmfZezbsZlIaEUBYTB4s4qzbG_cJO5hNSO-vxOa5aoeRkGOkOtLHAvbtIe_Q/exec";
 const GOOGLE_CLIENT_ID = "690250277277-otqse7oa1ro37uhut34ja9fp43dmkpge.apps.googleusercontent.com";
 const POLL_SECONDS = 30;
 
@@ -375,8 +376,18 @@ const STRINGS = {
     dashboard:"대시보드", dashWeekly:"주간 누적 인입", dashMonthly:"월별 인입",
     dashClient:"클라이언트별 인입", dashNew:"신규", dashCum:"누적",
     dashNoDate:"날짜 없는 항목 제외",
-    dashApproval:"온보딩 승인률 (인입월 기준)", dashApproved:"승인",
+    dashApproval:"월별 승인률", dashApproved:"승인",
     dashApprovalByClient:"클라이언트별 승인률",
+    dashWeeklySection:"주간 현황", dashMonthlySection:"월별 현황",
+    dashWeeklyApproval:"금주 승인률", dashWeeklyClient:"금주 클라이언트별",
+    weeklyReport:"주간 보고", reportTitle:"주간 온보딩 실적 보고",
+    reportPeriod:"기간", reportCorridor:"코리도", reportSummary:"요약",
+    reportTotal:"전체", reportThisWeek:"금주 인입", reportApprovalRate:"승인률",
+    reportStatusBreak:"상태별 현황", reportClientBreak:"클라이언트별 현황",
+    reportAttention:"주의 필요 항목", reportNoAttention:"없음",
+    reportCopyDone:"보고서가 복사됐어요", reportCopy:"📋 복사",
+    reportEmail:"📧 이메일 보내기", reportClose:"닫기",
+    reportItems:"건", reportApproved:"승인", reportNone:"건",
   },
   EN:{
     title:"Onboarding Status",
@@ -428,8 +439,18 @@ const STRINGS = {
     dashboard:"Dashboard", dashWeekly:"Weekly Cumulative Intake", dashMonthly:"Monthly Intake",
     dashClient:"Intake by Client", dashNew:"New", dashCum:"Cumulative",
     dashNoDate:"Items without dates excluded",
-    dashApproval:"Onboarding Approval Rate (by intake month)", dashApproved:"Approved",
+    dashApproval:"Monthly Approval Rate", dashApproved:"Approved",
     dashApprovalByClient:"Approval Rate by Client",
+    dashWeeklySection:"Weekly", dashMonthlySection:"Monthly",
+    dashWeeklyApproval:"This Week Approval Rate", dashWeeklyClient:"This Week by Client",
+    weeklyReport:"Weekly Report", reportTitle:"Weekly Onboarding Report",
+    reportPeriod:"Period", reportCorridor:"Corridor", reportSummary:"Summary",
+    reportTotal:"Total", reportThisWeek:"This week intake", reportApprovalRate:"Approval rate",
+    reportStatusBreak:"Status Breakdown", reportClientBreak:"Client Breakdown",
+    reportAttention:"Attention Needed", reportNoAttention:"None",
+    reportCopyDone:"Report copied", reportCopy:"📋 Copy",
+    reportEmail:"📧 Send Email", reportClose:"Close",
+    reportItems:" items", reportApproved:"approved",
   },
 };
 let lang = "KR";
@@ -624,6 +645,7 @@ function render(){
   sortBtn.classList.toggle("sort-on", sortMode==="recent");
   $("#btnExportCsv").textContent = L("btnExportCsv");
   $("#btnExportJson").textContent = L("btnExportJson");
+  $("#btnWeeklyReport").textContent = "📧 "+L("weeklyReport");
   const db=$("#btnDashboard"); db.textContent="📊 "+L("dashboard"); db.classList.toggle("dash-on",dashMode);
   renderTabs(); renderChips(); updateSync();
   if(dashMode){ renderDash(); return; }
@@ -793,24 +815,31 @@ function isoWeekStart(d){
 
 function renderDash(){
   const rows=Store.rows(), gf=groupField();
+  const success=CORR().success||[];
+  const isAppr=r=>success.indexOf(r.status)>=0;
   const dated=rows.filter(r=>r.requestDate).map(r=>({r,d:new Date(r.requestDate)})).filter(x=>!isNaN(x.d));
+  const noDate=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`;
+
+  const week=getWeekRange();
+  const weekRows=rows.filter(r=>r.requestDate&&r.requestDate>=week.start&&r.requestDate<=week.end);
+  const weekAppr=weekRows.filter(isAppr).length;
+  const weekRate=weekRows.length?Math.round(weekAppr/weekRows.length*100):0;
+
   const weekMap={};
   dated.forEach(x=>{const k=isoWeekStart(x.d);weekMap[k]=(weekMap[k]||0)+1;});
   const weeks=Object.keys(weekMap).sort();
   const weekData=weeks.map(w=>({week:w,count:weekMap[w]}));
   let cum=0; weekData.forEach(w=>{cum+=w.count; w.cum=cum;});
 
+  const weekClientMap={};
+  weekRows.forEach(r=>{const g=r[gf]||L("noGroup");const o=weekClientMap[g]||(weekClientMap[g]={t:0,a:0});o.t++;if(isAppr(r))o.a++;});
+  const weekClients=Object.entries(weekClientMap).map(([n,o])=>({name:n,t:o.t,a:o.a,rate:o.t?Math.round(o.a/o.t*100):0})).sort((a,b)=>b.t-a.t);
+
   const monthMap={};
   dated.forEach(x=>{const k=x.r.requestDate.slice(0,7);monthMap[k]=(monthMap[k]||0)+1;});
   const months=Object.keys(monthMap).sort();
   const monthData=months.map(m=>({month:m,count:monthMap[m]}));
 
-  const clientMap={};
-  rows.forEach(r=>{const g=r[gf]||L("noGroup");clientMap[g]=(clientMap[g]||0)+1;});
-  const clients=Object.entries(clientMap).map(([n,c])=>({name:n,count:c})).sort((a,b)=>b.count-a.count);
-
-  const success=CORR().success||[];
-  const isAppr=r=>success.indexOf(r.status)>=0;
   const apprAll=rows.filter(isAppr).length;
   const rateAll=rows.length?Math.round(apprAll/rows.length*100):0;
   const apM={};
@@ -821,28 +850,37 @@ function renderDash(){
   const apClients=Object.entries(apC).map(([n,o])=>({name:n,rate:o.t?Math.round(o.a/o.t*100):0,a:o.a,t:o.t})).sort((x,y)=>y.rate-x.rate||y.t-x.t);
 
   let h='';
-  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApproval")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
-  if(apMonths.length){
-    apMonths.slice().reverse().forEach(m=>{
-      const o=apM[m], rate=o.t?Math.round(o.a/o.t*100):0;
-      h+=`<div class="dash-bar-row"><span class="dash-bar-label">${m}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${rate}% <span style="color:var(--muted);font-weight:500">${o.a}/${o.t}</span></span></div>`;
-    });
-  } else { h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`; }
-  h+='</div>';
 
-  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApprovalByClient")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
-  apClients.forEach(c=>{
-    h+=`<div class="dash-bar-row"><span class="dash-bar-label" title="${esc(c.name)}">${esc(c.name)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${c.rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${c.rate}% <span style="color:var(--muted);font-weight:500">${c.a}/${c.t}</span></span></div>`;
-  });
-  if(!apClients.length) h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`;
-  h+='</div>';
+  h+=`<div style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em;padding:4px 2px 10px">${L("dashWeeklySection")}</div>`;
 
   h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashWeekly")}</div><div class="dash-sub">${dated.length} / ${rows.length}</div></div>`;
   if(weekData.length){
     h+=renderWeeklyChart(weekData);
     h+=`<div class="dash-legend"><span><i style="background:var(--accent-tint);border:1px solid var(--accent)"></i>${L("dashNew")}</span><span><i style="background:var(--s-live-d)"></i>${L("dashCum")}</span></div>`;
-  } else { h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`; }
+  } else h+=noDate;
   h+='</div>';
+
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashWeeklyApproval")}</div><div class="dash-sub">${week.label}</div></div>`;
+  if(weekRows.length){
+    h+=`<div style="text-align:center;padding:10px 0 14px"><span style="font-size:32px;font-weight:800;font-family:var(--mono);color:var(--s-live-t)">${weekRate}%</span><div style="font-size:12px;color:var(--muted);margin-top:4px">${L("dashApproved")} ${weekAppr} / ${weekRows.length}</div></div>`;
+    CORR().statuses.forEach(s=>{
+      const n=weekRows.filter(r=>r.status===s.v).length; if(!n) return;
+      const t=TONES[s.tone], p=Math.round(n/weekRows.length*100);
+      h+=`<div class="dash-bar-row"><span class="dash-bar-label" style="color:var(${t.t})">${esc(s.v)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${p}%;background:var(${t.d})"></div></div><span class="dash-bar-val">${n}${L("reportItems")}</span></div>`;
+    });
+  } else h+=noDate;
+  h+='</div>';
+
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashWeeklyClient")}</div><div class="dash-sub">${week.label}</div></div>`;
+  if(weekClients.length){
+    const maxWC=Math.max(...weekClients.map(c=>c.t),1);
+    weekClients.forEach(c=>{
+      h+=`<div class="dash-bar-row"><span class="dash-bar-label" title="${esc(c.name)}">${esc(c.name)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${Math.round(c.t/maxWC*100)}%;background:var(--accent)"></div></div><span class="dash-bar-val" style="min-width:76px">${c.t}${L("reportItems")} <span style="color:var(--muted);font-weight:500">${L("dashApproved")} ${c.a}</span></span></div>`;
+    });
+  } else h+=noDate;
+  h+='</div>';
+
+  h+=`<div style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em;padding:16px 2px 10px">${L("dashMonthlySection")}</div>`;
 
   h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashMonthly")}</div></div>`;
   const maxM=Math.max(...monthData.map(m=>m.count),1);
@@ -850,15 +888,23 @@ function renderDash(){
     const p=Math.round(m.count/maxM*100);
     h+=`<div class="dash-bar-row"><span class="dash-bar-label">${m.month}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${p}%;background:var(--accent)"></div></div><span class="dash-bar-val">${m.count}</span></div>`;
   });
-  if(!monthData.length) h+=`<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px 0">${L("dashNoDate")}</div>`;
+  if(!monthData.length) h+=noDate;
   h+='</div>';
 
-  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashClient")}</div></div>`;
-  const maxC=Math.max(...clients.map(c=>c.count),1);
-  clients.forEach(c=>{
-    const p=Math.round(c.count/maxC*100);
-    h+=`<div class="dash-bar-row"><span class="dash-bar-label" title="${esc(c.name)}">${esc(c.name)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${p}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val">${c.count}</span></div>`;
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApproval")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
+  if(apMonths.length){
+    apMonths.slice().reverse().forEach(m=>{
+      const o=apM[m], rate=o.t?Math.round(o.a/o.t*100):0;
+      h+=`<div class="dash-bar-row"><span class="dash-bar-label">${m}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${rate}% <span style="color:var(--muted);font-weight:500">${o.a}/${o.t}</span></span></div>`;
+    });
+  } else h+=noDate;
+  h+='</div>';
+
+  h+=`<div class="dash-card"><div class="dash-head"><div class="dash-title">${L("dashApprovalByClient")}</div><div class="dash-sub">${L("dashApproved")} ${apprAll} / ${rows.length} · ${rateAll}%</div></div>`;
+  apClients.forEach(c=>{
+    h+=`<div class="dash-bar-row"><span class="dash-bar-label" title="${esc(c.name)}">${esc(c.name)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${c.rate}%;background:var(--s-live-d)"></div></div><span class="dash-bar-val" style="min-width:76px">${c.rate}% <span style="color:var(--muted);font-weight:500">${c.a}/${c.t}</span></span></div>`;
   });
+  if(!apClients.length) h+=noDate;
   h+='</div>';
 
   $("#dashboard").innerHTML=h;
@@ -902,6 +948,77 @@ function renderWeeklyChart(data){
   s+='</svg>';
   return `<div class="dash-chart">${s}</div>`;
 }
+
+/* ============================ Weekly Report ============================ */
+function getWeekRange(){
+  const now=new Date(), day=now.getDay();
+  const mon=new Date(now); mon.setDate(now.getDate()-((day+6)%7));
+  const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+  const fmt=d=>d.toISOString().slice(0,10);
+  return {start:fmt(mon), end:fmt(sun), label:fmt(mon)+" ~ "+fmt(sun)};
+}
+function buildWeeklyReport(){
+  const week=getWeekRange();
+  const rows=Store.rows(), gf=groupField(), nf=nameField();
+  const success=CORR().success||[];
+  const isAppr=r=>success.indexOf(r.status)>=0;
+  const weekRows=rows.filter(r=>r.requestDate&&r.requestDate>=week.start&&r.requestDate<=week.end);
+  const apprAll=rows.filter(isAppr).length;
+  const rateAll=rows.length?Math.round(apprAll/rows.length*100):0;
+  const apprWeek=weekRows.filter(isAppr).length;
+  const rateWeek=weekRows.length?Math.round(apprWeek/weekRows.length*100):0;
+  const statusMap={};
+  rows.forEach(r=>{const s=r.status||"—";statusMap[s]=(statusMap[s]||0)+1;});
+  const clientMap={};
+  rows.forEach(r=>{const g=r[gf]||L("noGroup");const o=clientMap[g]||(clientMap[g]={t:0,a:0});o.t++;if(isAppr(r))o.a++;});
+  const attnRows=rows.filter(r=>isAttention(r));
+  const nl="\n";
+  let t="";
+  t+=`[${L("reportTitle")}] ${active}${nl}`;
+  t+=`${L("reportPeriod")}: ${week.label}${nl}`;
+  t+=`────────────────────────${nl}${nl}`;
+  t+=`■ ${L("reportSummary")}${nl}`;
+  t+=`  ${L("reportTotal")}: ${rows.length}${L("reportItems")}${nl}`;
+  t+=`  ${L("reportThisWeek")}: ${weekRows.length}${L("reportItems")}${nl}`;
+  t+=`  ${L("reportApprovalRate")} (${L("reportTotal")}): ${apprAll}/${rows.length} (${rateAll}%)${nl}`;
+  if(weekRows.length) t+=`  ${L("reportApprovalRate")} (${L("reportThisWeek")}): ${apprWeek}/${weekRows.length} (${rateWeek}%)${nl}`;
+  t+=nl;
+  t+=`■ ${L("reportStatusBreak")}${nl}`;
+  CORR().statuses.forEach(s=>{const n=statusMap[s.v]||0; t+=`  ${s.v}: ${n}${L("reportItems")}${nl}`;});
+  t+=nl;
+  t+=`■ ${L("reportClientBreak")}${nl}`;
+  Object.entries(clientMap).sort((a,b)=>b[1].t-a[1].t).forEach(([n,o])=>{
+    const r=o.t?Math.round(o.a/o.t*100):0;
+    t+=`  ${n}: ${o.t}${L("reportItems")} (${L("reportApproved")} ${o.a}, ${r}%)${nl}`;
+  });
+  t+=nl;
+  t+=`■ ${L("reportAttention")}${nl}`;
+  if(!attnRows.length) t+=`  ${L("reportNoAttention")}${nl}`;
+  else attnRows.slice(0,10).forEach(r=>{t+=`  - ${r[nf]||"—"}${r.merchantId?" ("+r.merchantId+")":""} · ${r.status}${nl}`;});
+  if(attnRows.length>10) t+=`  ... +${attnRows.length-10}${L("reportItems")}${nl}`;
+  return {text:t, subject:`[SMOS] ${L("reportTitle")} ${active} (${week.label})`};
+}
+function openWeeklyReport(){
+  const rpt=buildWeeklyReport();
+  const previewHtml=esc(rpt.text).replace(/\n/g,"<br>");
+  openModal(`<h2>${L("reportTitle")} · ${active}</h2>
+    <div class="msub">${getWeekRange().label}</div>
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12.5px;font-family:var(--mono);line-height:1.7;max-height:50vh;overflow-y:auto;white-space:pre-wrap;word-break:break-word;margin-bottom:14px;">${previewHtml}</div>
+    <div class="modal-actions">
+      <button class="cancel" data-close>${L("reportClose")}</button>
+      <button class="save" id="btnReportCopy" style="flex:1">${L("reportCopy")}</button>
+      <button class="save" id="btnReportEmail" style="flex:1.2;background:var(--s-live-d)">${L("reportEmail")}</button>
+    </div>`);
+  modal.querySelector("[data-close]").onclick=closeModal;
+  $("#btnReportCopy").onclick=()=>{clipCopy(rpt.text,L("reportCopyDone"));};
+  $("#btnReportEmail").onclick=()=>{
+    const subj=encodeURIComponent(rpt.subject);
+    const body=encodeURIComponent(rpt.text);
+    const mailto="mailto:?subject="+subj+"&body="+body;
+    window.open(mailto,"_blank");
+  };
+}
+$("#btnWeeklyReport").addEventListener("click", openWeeklyReport);
 
 /* ============================ Import / Export ============================ */
 function toCSV(){
