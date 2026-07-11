@@ -502,7 +502,7 @@ const Store = {
   },
   rows(){ return this.data[active] || (this.data[active]=[]); },
 };
-function ensureIds(d){ for(const k in d)(d[k]||[]).forEach(r=>{ if(!r.id) r.id=uid(); }); }
+function ensureIds(d){ for(const k in d){ const v=d[k]; if(Array.isArray(v)) v.forEach(r=>{ if(!r.id) r.id=uid(); }); } }
 async function refresh(){
   if(!BACKEND_URL || !Auth.loggedIn) return;
   if(backdrop.classList.contains("show")) return;
