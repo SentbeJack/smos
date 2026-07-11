@@ -9,22 +9,73 @@ function getSheetId_() {
 }
 
 var ALLOWED_DOMAINS = ["sentbe.com"];
+var GOOGLE_CLIENT_ID = "690250277277-otqse7oa1ro37uhut34ja9fp43dmkpge.apps.googleusercontent.com";
 
 function verifyToken_(token) {
   if (!token) return null;
   try {
-    var resp = UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(token), { muteHttpExceptions: true });
-    if (resp.getResponseCode() !== 200) return null;
-    var info = JSON.parse(resp.getContentText());
-    var email = (info.email || "").toLowerCase();
-    var domain = email.split("@")[1] || "";
-    for (var i = 0; i < ALLOWED_DOMAINS.length; i++) {
-      if (domain === ALLOWED_DOMAINS[i]) return { email: email, domain: domain };
-    }
-    return null;
+    var parts = token.split(".");
+    if (parts.length !== 3) return null;
+    var payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString());
+    if (!payload.email) return null;
+    if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") return null;
+    var now = Math.floor(Date.now() / 1000);
+    if (payload.exp && payload.exp < now) return null;
+    if (payload.aud && payload.aud !== GOOGLE_CLIENT_ID) return null;
+    return { email: payload.email.toLowerCase(), domain: payload.email.toLowerCase().split("@")[1] || "" };
   } catch (e) {
     return null;
   }
+}
+
+function findInArray_(arr, candidates) {
+  for (var i = 0; i < candidates.length; i++) {
+    var idx = arr.indexOf(candidates[i]);
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function readEmailTab_() {
+  try {
+    var sheet = SpreadsheetApp.openById(getSheetId_()).getSheetByName("email");
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var headers = data[0].map(function(h) { return String(h).toLowerCase().trim(); });
+    var cols = {
+      email: Math.max(0, findInArray_(headers, ["email"])),
+      name: findInArray_(headers, ["name"]),
+      subscribe: findInArray_(headers, ["subscribe", "sub"]),
+      team: findInArray_(headers, ["team", "type"]),
+      role: findInArray_(headers, ["role"])
+    };
+    var rows = [];
+    for (var r = 1; r < data.length; r++) {
+      var em = String(data[r][cols.email]).trim().toLowerCase();
+      if (!em || em.indexOf("@") < 0) continue;
+      rows.push({
+        email: em,
+        name: cols.name >= 0 ? String(data[r][cols.name]).trim() : "",
+        subscribe: cols.subscribe >= 0 ? String(data[r][cols.subscribe]).trim().toUpperCase() === "Y" : true,
+        team: cols.team >= 0 ? String(data[r][cols.team]).trim().toLowerCase() : "ops",
+        role: cols.role >= 0 ? String(data[r][cols.role]).trim().toLowerCase() || "viewer" : "viewer"
+      });
+    }
+    return rows;
+  } catch (e) { return []; }
+}
+
+function isAuthorized_(email) {
+  var domain = email.split("@")[1] || "";
+  for (var i = 0; i < ALLOWED_DOMAINS.length; i++) {
+    if (domain === ALLOWED_DOMAINS[i]) return true;
+  }
+  var users = readEmailTab_();
+  for (var j = 0; j < users.length; j++) {
+    if (users[j].email === email) return true;
+  }
+  return false;
 }
 
 function escHtml_(s) {
@@ -65,7 +116,7 @@ var MAP = {
   }
 };
 
-var VERSION = "2026-07-12-email";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-07-12-auth-v2";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -135,11 +186,18 @@ function jsonOut_(obj) {
 function doGet(e) {
   var token = (e && e.parameter && e.parameter.token) || "";
   var user = verifyToken_(token);
-  if (!user) return jsonOut_({ error: "forbidden", message: "Invalid or missing token" });
+  if (!user) return jsonOut_({ error: "forbidden", message: "Invalid or expired token" });
+  if (!isAuthorized_(user.email)) return jsonOut_({ error: "forbidden", message: "Not authorized" });
+
+  var userInfo = { email: user.email, role: "viewer" };
+  var users = readEmailTab_();
+  for (var i = 0; i < users.length; i++) {
+    if (users[i].email === user.email) { userInfo.role = users[i].role; break; }
+  }
 
   var data = { KRW: readTab(MAP.KRW, {}), VND: readTab(MAP.VND, {}) };
   data._version = VERSION;
-  data._user = { email: user.email, role: "viewer" };
+  data._user = userInfo;
   return jsonOut_(data);
 }
 
@@ -185,20 +243,17 @@ function validateEmail_(raw) {
 
 /* ---- 주간 보고 이메일 자동 발송 ---- */
 function sendWeeklyReport() {
-  var ss = SpreadsheetApp.openById(getSheetId_());
-  var emailSheet = ss.getSheetByName("email");
-  if (!emailSheet) { Logger.log("email tab not found"); return; }
+  var users = readEmailTab_();
+  if (!users.length) { Logger.log("email tab empty or not found"); return; }
 
-  var data = emailSheet.getDataRange().getValues();
   var byType = { ops: [], sales: [] };
   var skipped = [];
-  for (var i = 1; i < data.length; i++) {
-    var flag = String(data[i][2]).trim().toUpperCase();
-    if (flag !== "Y") continue;
-    var validated = validateEmail_(data[i][0]);
-    if (!validated) { skipped.push(String(data[i][0]).trim()); continue; }
-    var type = String(data[i][3] || "ops").trim().toLowerCase();
-    if (type === "sales") byType.sales.push(validated);
+  for (var i = 0; i < users.length; i++) {
+    var u = users[i];
+    if (!u.subscribe) continue;
+    var validated = validateEmail_(u.email);
+    if (!validated) { skipped.push(u.email); continue; }
+    if (u.team === "sales") byType.sales.push(validated);
     else byType.ops.push(validated);
   }
   if (skipped.length) Logger.log("Skipped invalid/external emails: " + skipped.join(", "));
