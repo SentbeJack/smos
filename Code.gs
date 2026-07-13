@@ -13,19 +13,53 @@ var GOOGLE_CLIENT_ID = "690250277277-otqse7oa1ro37uhut34ja9fp43dmkpge.apps.googl
 
 function verifyToken_(token) {
   if (!token) return null;
+  var parts = token.split(".");
+  if (parts.length !== 3) return null;
+
+  // 1) 만료 토큰은 네트워크 호출 없이 즉시 차단
+  var payload;
   try {
-    var parts = token.split(".");
-    if (parts.length !== 3) return null;
-    var payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString());
-    if (!payload.email) return null;
-    if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") return null;
-    var now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) return null;
-    if (payload.aud && payload.aud !== GOOGLE_CLIENT_ID) return null;
-    return { email: payload.email.toLowerCase(), domain: payload.email.toLowerCase().split("@")[1] || "" };
+    payload = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1])).getDataAsString());
+  } catch (e) { return null; }
+  var now = Math.floor(Date.now() / 1000);
+  if (!payload.email || !payload.exp || payload.exp < now) return null;
+
+  // 2) CacheService — 동일 토큰 반복 검증 방지
+  var cache = CacheService.getScriptCache();
+  var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, token);
+  var cacheKey = "tv_" + digest.map(function(b) { return (b < 0 ? b + 256 : b).toString(16).padStart(2, "0"); }).join("");
+  var cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  // 3) Primary: Google tokeninfo로 서명 검증 (script.external_request 스코프 필요)
+  var result = null;
+  try {
+    var resp = UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + token, { muteHttpExceptions: true });
+    if (resp.getResponseCode() === 200) {
+      var info = JSON.parse(resp.getContentText());
+      if (info.aud === GOOGLE_CLIENT_ID &&
+          (info.iss === "accounts.google.com" || info.iss === "https://accounts.google.com") &&
+          info.email_verified === "true" && info.email) {
+        result = { email: info.email.toLowerCase(), domain: info.email.toLowerCase().split("@")[1] || "" };
+      }
+    }
   } catch (e) {
-    return null;
+    // UrlFetchApp 스코프 미부여 시 fallback으로 전환
   }
+
+  // 4) Fallback: JWT claims 검증 (서명 미검증 — 내부 도구 한정 허용)
+  if (!result) {
+    if (payload.aud !== GOOGLE_CLIENT_ID) return null;
+    if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") return null;
+    if (!payload.iat || payload.iat > now + 300) return null;
+    if (payload.email_verified !== true) return null;
+    result = { email: payload.email.toLowerCase(), domain: payload.email.toLowerCase().split("@")[1] || "" };
+  }
+
+  // 5) 검증 결과 캐시 (토큰 남은 수명, 최대 600초)
+  var ttl = Math.min(Math.max(payload.exp - now, 0), 600);
+  if (ttl > 10) cache.put(cacheKey, JSON.stringify(result), ttl);
+  return result;
 }
 
 function findInArray_(arr, candidates) {
@@ -67,13 +101,9 @@ function readEmailTab_() {
 }
 
 function isAuthorized_(email) {
-  var domain = email.split("@")[1] || "";
-  for (var i = 0; i < ALLOWED_DOMAINS.length; i++) {
-    if (domain === ALLOWED_DOMAINS[i]) return true;
-  }
   var users = readEmailTab_();
-  for (var j = 0; j < users.length; j++) {
-    if (users[j].email === email) return true;
+  for (var i = 0; i < users.length; i++) {
+    if (users[i].email === email) return true;
   }
   return false;
 }
@@ -116,7 +146,7 @@ var MAP = {
   }
 };
 
-var VERSION = "2026-07-12-auth-v2";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-07-13-auth-v3";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
