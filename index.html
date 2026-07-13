@@ -101,6 +101,7 @@
   .item-name{font-size:14.5px; font-weight:600; letter-spacing:-.01em; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .item-sub{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
   .mid{font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--muted);}
+  .bank-chip{font-size:10.5px; font-weight:650; color:var(--s-info-t,var(--accent)); background:var(--s-info-b,color-mix(in srgb, var(--accent) 12%, transparent)); padding:2px 7px; border-radius:5px;}
   .reason-chip{font-size:10.5px; font-weight:650; color:var(--s-rej-t); background:var(--s-rej-b); padding:2px 7px; border-radius:5px;}
   .va-flag{font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px;}
   .va-yes{color:var(--s-vac-t); background:var(--s-vac-b); cursor:pointer; transition:all .12s;}
@@ -289,7 +290,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-let BACKEND_URL = "https://script.google.com/macros/s/AKfycbwKGUuAeYhhDo70sKedXqhto5vxnj6pGC-fPQqA-Vrdj0zhFb3vhM9HUOwDczlz1Ps6-w/exec";
+let BACKEND_URL = "https://script.google.com/macros/s/AKfycbzXzXkyQ9WZteq944Swx5LWtKah51C6zxMImOWBPNL49BnFfoENkMvA9HL2Yywz-t78eQ/exec";
 const GOOGLE_CLIENT_ID = "690250277277-otqse7oa1ro37uhut34ja9fp43dmkpge.apps.googleusercontent.com";
 const POLL_SECONDS = 30;
 
@@ -493,6 +494,7 @@ const CORRIDORS = {
       {field:"name",        header:"Merchant Entity Name",    label:"상점명",     labelEn:"Merchant",       role:"name"},
       {field:"fiMerchant",  header:"FI Merchant",             label:"FI Merchant", labelEn:"FI Merchant",   role:"group"},
       {field:"fiPartner",   header:"FI Partner",              label:"FI Partner",  labelEn:"FI Partner"},
+      {field:"bankName",   header:"Bank name",               label:"은행명",     labelEn:"Bank",           role:"bank"},
       {field:"requestDate", header:"Request Date",            label:"요청일",     labelEn:"Requested",      mono:true, type:"date"},
       {field:"status",      header:"Onboarding Status",       label:"상태",       labelEn:"Status",         role:"status"},
       {field:"va",          header:"Assigned VA number",      label:"VA 번호",    labelEn:"VA No.",         mono:true},
@@ -709,6 +711,7 @@ function itemHTML(r){
         <div class="item-name">${esc(r[nameField()])||`<span style="color:var(--muted)">${L("noName")}</span>`}</div>
         <div class="item-sub">
           ${mid?`<span class="mid">${esc(mid)}</span>`:``}
+          ${(()=>{const bc=colOf("bank"); return bc&&r[bc.field]?`<span class="bank-chip">${esc(r[bc.field])}</span>`:``})()}
           ${stepTag(r)}
           ${r.va?`<span class="va-flag va-yes" data-act="copy-va" data-va="${esc(r.va)}">VA ✓</span>`:``}
           ${reason?`<span class="reason-chip">${esc(reason)}</span>`:``}

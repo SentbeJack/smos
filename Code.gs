@@ -167,7 +167,8 @@ var MAP = {
       va: "Assigned VA number",
       vaDate: "VA Issuance Date",
       kycDate: "Date of Onboarding KYC",
-      jira: "Jira Link (for tracking)"
+      jira: "Jira Link (for tracking)",
+      bankName: "Bank name"
     }
   }
 };
