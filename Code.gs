@@ -100,8 +100,34 @@ function readEmailTab_() {
   } catch (e) { return []; }
 }
 
+function readUsersTab_() {
+  try {
+    var sheet = SpreadsheetApp.openById(getSheetId_()).getSheetByName("Users");
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var headers = data[0].map(function(h) { return String(h).toLowerCase().trim(); });
+    var cols = {
+      email: Math.max(0, findInArray_(headers, ["email"])),
+      name: findInArray_(headers, ["name"]),
+      role: findInArray_(headers, ["role"])
+    };
+    var rows = [];
+    for (var r = 1; r < data.length; r++) {
+      var em = String(data[r][cols.email]).trim().toLowerCase();
+      if (!em || em.indexOf("@") < 0) continue;
+      rows.push({
+        email: em,
+        name: cols.name >= 0 ? String(data[r][cols.name]).trim() : "",
+        role: cols.role >= 0 ? String(data[r][cols.role]).trim().toLowerCase() || "user" : "user"
+      });
+    }
+    return rows;
+  } catch (e) { return []; }
+}
+
 function isAuthorized_(email) {
-  var users = readEmailTab_();
+  var users = readUsersTab_();
   for (var i = 0; i < users.length; i++) {
     if (users[i].email === email) return true;
   }
@@ -146,7 +172,7 @@ var MAP = {
   }
 };
 
-var VERSION = "2026-07-13-auth-v3";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-07-13-auth-v4";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -219,8 +245,8 @@ function doGet(e) {
   if (!user) return jsonOut_({ error: "forbidden", message: "Invalid or expired token" });
   if (!isAuthorized_(user.email)) return jsonOut_({ error: "forbidden", message: "Not authorized" });
 
-  var userInfo = { email: user.email, role: "viewer" };
-  var users = readEmailTab_();
+  var userInfo = { email: user.email, role: "user" };
+  var users = readUsersTab_();
   for (var i = 0; i < users.length; i++) {
     if (users[i].email === user.email) { userInfo.role = users[i].role; break; }
   }
