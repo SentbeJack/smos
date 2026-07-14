@@ -629,10 +629,11 @@ function sendSlack_(payload) {
 
 /* ---- 실시간 onEdit 핸들러 (Installable trigger로 등록) ---- */
 function onSheetEdit(e) {
-  if (!e || !e.range) return;
+  if (!e || !e.range) { Logger.log("onSheetEdit: no event or range"); return; }
   var sheet = e.range.getSheet();
   var tab = sheet.getName();
-  if (tab !== "KRW" && tab !== "VND") return;
+  Logger.log("onSheetEdit fired: tab=" + tab + " row=" + e.range.getRow() + " col=" + e.range.getColumn() + " cols=" + e.range.getNumColumns() + " rows=" + e.range.getNumRows());
+  if (tab !== "KRW" && tab !== "VND") { Logger.log("onSheetEdit: skip non-target tab"); return; }
 
   var cs = CORRIDOR_STATUSES[tab];
   if (!cs) return;
@@ -650,6 +651,7 @@ function onSheetEdit(e) {
     if (normH[i] === "merchant id") midCol = i + 1;
     if (normH[i] === "sub merchant name" || normH[i] === "merchant entity name") nameCol = i + 1;
   }
+  Logger.log("onSheetEdit columns: statusCol=" + statusCol + " nameCol=" + nameCol + " midCol=" + midCol);
 
   var editCol = e.range.getColumn();
   var editColEnd = editCol + e.range.getNumColumns() - 1;
@@ -675,6 +677,8 @@ function onSheetEdit(e) {
 
     var statusEdited = (statusCol >= editCol && statusCol <= editColEnd);
     var nameOrMidEdited = (midCol >= editCol && midCol <= editColEnd) || (nameCol >= editCol && nameCol <= editColEnd);
+
+    Logger.log("onSheetEdit row " + row + ": name=" + name + " mid=" + mid + " status=" + status + " prev=" + prevStatus + " statusEdited=" + statusEdited + " statusChanged=" + statusChanged);
 
     if (statusEdited && statusChanged) {
       // 1) Failed — KRW: Failed / VND: Rejected / Offboarded
@@ -715,6 +719,7 @@ function onSheetEdit(e) {
   }
 
   PropertiesService.getScriptProperties().setProperty("slack_status_snap", JSON.stringify(statusSnap));
+  Logger.log("onSheetEdit: " + alerts.length + " alerts to send");
   if (!alerts.length) return;
 
   alerts.forEach(function(a) {
@@ -809,20 +814,24 @@ function sendSlackWeeklyReport() {
 
 /* ---- Slack 트리거 설정 (1회 실행) ---- */
 function createSlackTriggers() {
-  var handlers = ["onSheetEdit", "sendSlackWeeklyReport"];
   var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    if (handlers.indexOf(triggers[i].getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(triggers[i]);
+  for (var i = triggers.length - 1; i >= 0; i--) {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === "onSheetEdit" || fn === "sendSlackWeeklyReport") {
+      ScriptApp.deleteTrigger(triggers[i]);
+      Logger.log("Deleted old trigger: " + fn);
+    }
   }
 
-  // 실시간 감지: Installable onEdit (시트 편집 즉시 발동)
-  var ss = SpreadsheetApp.openById(getSheetId_());
+  var ss = SpreadsheetApp.getActive();
+  Logger.log("Binding trigger to: " + (ss ? ss.getName() + " (" + ss.getId() + ")" : "null — fallback to openById"));
+  if (!ss) ss = SpreadsheetApp.openById(getSheetId_());
+
   ScriptApp.newTrigger("onSheetEdit")
     .forSpreadsheet(ss)
     .onEdit()
     .create();
 
-  // 주간 보고: 월요일 09:10 KST
   ScriptApp.newTrigger("sendSlackWeeklyReport")
     .timeBased()
     .onWeekDay(ScriptApp.WeekDay.MONDAY)
@@ -831,14 +840,19 @@ function createSlackTriggers() {
     .inTimezone("Asia/Seoul")
     .create();
 
-  Logger.log("Slack triggers created: onSheetEdit (realtime) + weeklyReport Mon 09:10 KST");
+  var newTriggers = ScriptApp.getProjectTriggers();
+  Logger.log("Triggers now active: " + newTriggers.length);
+  newTriggers.forEach(function(t) {
+    Logger.log("  " + t.getHandlerFunction() + " | " + t.getEventType() + " | UID: " + t.getUniqueId());
+  });
 }
 
 /* ---- 기존 데이터 상태 스냅샷 초기화 (1회 실행 — 기존 행을 "이미 본 것"으로 마킹) ---- */
 function initStatusSnapshot() {
+  var ss = SpreadsheetApp.getActive() || SpreadsheetApp.openById(getSheetId_());
   var snap = {};
   ["KRW", "VND"].forEach(function(key) {
-    var sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(key);
+    var sh = ss.getSheetByName(key);
     if (!sh) return;
     var vals = sh.getDataRange().getValues();
     var headers = vals[0].map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
@@ -846,7 +860,8 @@ function initStatusSnapshot() {
     for (var i = 0; i < headers.length; i++) {
       if (headers[i].indexOf("onboarding status") >= 0) { statusCol = i; break; }
     }
-    if (statusCol < 0) return;
+    if (statusCol < 0) { Logger.log(key + ": 'onboarding status' column NOT FOUND"); return; }
+    Logger.log(key + ": status column found at index " + statusCol);
     for (var r = 1; r < vals.length; r++) {
       var s = String(vals[r][statusCol]).trim();
       if (s) snap[key + "-" + (r + 1)] = s;
@@ -854,4 +869,61 @@ function initStatusSnapshot() {
   });
   PropertiesService.getScriptProperties().setProperty("slack_status_snap", JSON.stringify(snap));
   Logger.log("Status snapshot initialized: " + Object.keys(snap).length + " rows marked as seen");
+}
+
+/* ---- 테스트: Slack 웹훅 동작 확인 ---- */
+function testSlackAlert() {
+  var payload = {
+    blocks: [
+      { type: "header", text: { type: "plain_text", text: ":test_tube: SMOS Test Alert" } },
+      { type: "section", text: { type: "mrkdwn", text: "Slack 웹훅 정상 동작 확인\n" + new Date().toLocaleString("ko-KR", {timeZone: "Asia/Seoul"}) } },
+      { type: "divider" },
+      { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+    ]
+  };
+  var ok = sendSlack_(payload);
+  Logger.log("testSlackAlert result: " + ok);
+}
+
+/* ---- 전체 진단 ---- */
+function debugAll() {
+  Logger.log("===== SMOS Debug =====");
+
+  var ss = SpreadsheetApp.getActive();
+  Logger.log("SpreadsheetApp.getActive(): " + (ss ? ss.getName() + " (" + ss.getId() + ")" : "null (standalone script!)"));
+
+  var props = PropertiesService.getScriptProperties().getProperties();
+  Logger.log("SHEET_ID: " + (props["SHEET_ID"] || "NOT SET"));
+  Logger.log("SLACK_WEBHOOK_URL: " + (props["SLACK_WEBHOOK_URL"] ? "SET" : "NOT SET"));
+  var snap = props["slack_status_snap"] ? JSON.parse(props["slack_status_snap"]) : {};
+  Logger.log("slack_status_snap: " + Object.keys(snap).length + " rows");
+
+  Logger.log("--- Triggers ---");
+  var triggers = ScriptApp.getProjectTriggers();
+  Logger.log("Total triggers: " + triggers.length);
+  triggers.forEach(function(t) {
+    Logger.log("  " + t.getHandlerFunction() + " | type=" + t.getEventType() + " | source=" + t.getTriggerSource() + " | uid=" + t.getUniqueId());
+  });
+
+  Logger.log("--- Column Detection ---");
+  var target = ss || SpreadsheetApp.openById(getSheetId_());
+  ["KRW", "VND"].forEach(function(tab) {
+    var sh = target.getSheetByName(tab);
+    if (!sh) { Logger.log(tab + ": sheet NOT FOUND"); return; }
+    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    var normH = headers.map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
+    var statusCol = -1, nameCol = -1, midCol = -1;
+    for (var i = 0; i < normH.length; i++) {
+      if (normH[i].indexOf("onboarding status") >= 0) statusCol = i + 1;
+      if (normH[i] === "merchant id") midCol = i + 1;
+      if (normH[i] === "sub merchant name" || normH[i] === "merchant entity name") nameCol = i + 1;
+    }
+    Logger.log(tab + " => statusCol=" + statusCol + " nameCol=" + nameCol + " midCol=" + midCol);
+    if (statusCol < 0) Logger.log("  WARNING: 'onboarding status' column NOT FOUND in " + tab);
+    Logger.log(tab + " headers: " + JSON.stringify(headers));
+  });
+
+  Logger.log("--- Slack Test ---");
+  testSlackAlert();
+  Logger.log("===== Done =====");
 }
