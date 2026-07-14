@@ -173,7 +173,7 @@ var MAP = {
   }
 };
 
-var VERSION = "2026-07-13-auth-v4";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-07-13-slack-v1";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -582,4 +582,177 @@ function createWeeklyTrigger() {
     .inTimezone("Asia/Seoul")
     .create();
   Logger.log("Weekly trigger created: Monday 09:00 KST");
+}
+
+/* ============================ Slack Integration ============================ */
+
+var FAIL_STATUSES = { KRW: ["Failed"], VND: ["Rejected / Offboarded"] };
+
+function getSlackWebhook_() {
+  return PropertiesService.getScriptProperties().getProperty("SLACK_WEBHOOK_URL") || "";
+}
+
+function sendSlack_(payload) {
+  var url = getSlackWebhook_();
+  if (!url) { Logger.log("SLACK_WEBHOOK_URL not set"); return false; }
+  try {
+    var resp = UrlFetchApp.fetch(url, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    var ok = resp.getResponseCode() === 200;
+    if (!ok) Logger.log("Slack error: " + resp.getResponseCode() + " " + resp.getContentText());
+    return ok;
+  } catch (e) { Logger.log("Slack fetch error: " + e); return false; }
+}
+
+/* ---- 실시간 onEdit 핸들러 (Installable trigger로 등록) ---- */
+function onSheetEdit(e) {
+  if (!e || !e.range) return;
+  var sheet = e.range.getSheet();
+  var tab = sheet.getName();
+  if (tab !== "KRW" && tab !== "VND") return;
+
+  var row = e.range.getRow();
+  if (row <= 1) return;
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var normH = headers.map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
+
+  var statusCol = -1, nameCol = -1, midCol = -1;
+  for (var i = 0; i < normH.length; i++) {
+    if (normH[i].indexOf("onboarding status") >= 0) statusCol = i + 1;
+    if (normH[i] === "merchant id") midCol = i + 1;
+    if (normH[i] === "sub merchant name" || normH[i] === "merchant entity name") nameCol = i + 1;
+  }
+
+  var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var name = nameCol > 0 ? String(rowData[nameCol - 1]).trim() : "";
+  var mid = midCol > 0 ? String(rowData[midCol - 1]).trim() : "";
+  var status = statusCol > 0 ? String(rowData[statusCol - 1]).trim() : "";
+  if (!name && !mid) return;
+
+  var col = e.range.getColumn();
+  var oldVal = e.oldValue ? String(e.oldValue).trim() : "";
+  var newVal = e.value ? String(e.value).trim() : "";
+
+  // 1) 상태가 Failed/Rejected로 변경됨
+  if (col === statusCol && FAIL_STATUSES[tab] && FAIL_STATUSES[tab].indexOf(status) >= 0) {
+    var reason = "";
+    if (tab === "KRW") {
+      for (var j = 0; j < normH.length; j++) {
+        if (normH[j].indexOf("failed reason") >= 0) { reason = String(rowData[j]).trim(); break; }
+      }
+    }
+    var blocks = [
+      { type: "header", text: { type: "plain_text", text: ":rotating_light: Onboarding Failed" } },
+      { type: "section", text: { type: "mrkdwn", text: "*[" + tab + "]* " + (name || "—") + "\n`MID: " + (mid || "—") + "`\n:x: *" + status + "*" + (oldVal ? " (was: " + oldVal + ")" : "") + (reason ? "\nReason: " + reason : "") } },
+      { type: "divider" },
+      { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+    ];
+    sendSlack_({ blocks: blocks });
+    Logger.log("Slack: failed alert — " + tab + " " + (name || mid));
+    return;
+  }
+
+  // 2) 상태가 성공으로 변경됨 (Succeeded / Approved)
+  var SUCCESS = { KRW: ["Succeeded"], VND: ["Approved"] };
+  if (col === statusCol && SUCCESS[tab] && SUCCESS[tab].indexOf(status) >= 0 && oldVal !== status) {
+    var blocks = [
+      { type: "header", text: { type: "plain_text", text: ":tada: Onboarding Approved" } },
+      { type: "section", text: { type: "mrkdwn", text: "*[" + tab + "]* " + (name || "—") + "\n`MID: " + (mid || "—") + "`\n:white_check_mark: *" + status + "*" + (oldVal ? " (was: " + oldVal + ")" : "") } },
+      { type: "divider" },
+      { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+    ];
+    sendSlack_({ blocks: blocks });
+    Logger.log("Slack: approved alert — " + tab + " " + (name || mid));
+    return;
+  }
+
+  // 3) 새 머천트 행 (MID 또는 Name이 처음 입력됨)
+  if ((col === midCol || col === nameCol) && newVal && !oldVal) {
+    if (name && mid) {
+      var blocks = [
+        { type: "header", text: { type: "plain_text", text: ":new: New Onboarding Request" } },
+        { type: "section", text: { type: "mrkdwn", text: "*[" + tab + "]* " + name + "\n`MID: " + mid + "`" + (status ? "\nStatus: " + status : "") } },
+        { type: "divider" },
+        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+      ];
+      sendSlack_({ blocks: blocks });
+      Logger.log("Slack: new merchant — " + tab + " " + name);
+    }
+  }
+}
+
+/* ---- 주간 보고 Slack 전송 ---- */
+function sendSlackWeeklyReport() {
+  var tz = Session.getScriptTimeZone();
+  var now = new Date();
+  var day = now.getDay();
+  var mon = new Date(now); mon.setDate(now.getDate() - ((day + 6) % 7) - 7);
+  var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  var fmt = function(d) { return Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
+  var period = fmt(mon) + " ~ " + fmt(sun);
+
+  var corridors = [
+    { key: "KRW", success: ["Succeeded"], fail: ["Failed"] },
+    { key: "VND", success: ["Approved"], fail: ["Rejected / Offboarded"] }
+  ];
+
+  var blocks = [
+    { type: "header", text: { type: "plain_text", text: ":bar_chart: SMOS Weekly Report" } },
+    { type: "section", text: { type: "mrkdwn", text: "*" + period + "*" } },
+    { type: "divider" }
+  ];
+
+  corridors.forEach(function(c) {
+    var rows = readTab(MAP[c.key], {});
+    var start = fmt(mon), end = fmt(sun);
+    var weekRows = rows.filter(function(r) { return r.requestDate && r.requestDate >= start && r.requestDate <= end; });
+    var totalAppr = rows.filter(function(r) { return c.success.indexOf(r.status) >= 0; }).length;
+    var totalRate = rows.length ? Math.round(totalAppr / rows.length * 100) : 0;
+    var weekAppr = weekRows.filter(function(r) { return c.success.indexOf(r.status) >= 0; }).length;
+    var weekFail = weekRows.filter(function(r) { return c.fail.indexOf(r.status) >= 0; }).length;
+
+    var txt = "*[" + c.key + "]*\n";
+    txt += ":busts_in_silhouette: Total: *" + rows.length + "*건 · Approval rate: *" + totalRate + "%* (" + totalAppr + "/" + rows.length + ")\n";
+    txt += ":calendar: This week: *" + weekRows.length + "*건 신규";
+    if (weekAppr) txt += " · :white_check_mark: " + weekAppr + " approved";
+    if (weekFail) txt += " · :x: " + weekFail + " failed";
+    blocks.push({ type: "section", text: { type: "mrkdwn", text: txt } });
+  });
+
+  blocks.push({ type: "divider" });
+  blocks.push({ type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: ":bar_chart: Dashboard 열기" }, url: "https://sentbejack.github.io/smos/" }] });
+
+  sendSlack_({ blocks: blocks });
+  Logger.log("Slack weekly report sent for " + period);
+}
+
+/* ---- Slack 트리거 설정 (1회 실행) ---- */
+function createSlackTriggers() {
+  var handlers = ["onSheetEdit", "sendSlackWeeklyReport"];
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (handlers.indexOf(triggers[i].getHandlerFunction()) >= 0) ScriptApp.deleteTrigger(triggers[i]);
+  }
+
+  // 실시간 감지: Installable onEdit (시트 편집 즉시 발동)
+  ScriptApp.newTrigger("onSheetEdit")
+    .forSpreadsheet(getSheetId_())
+    .onEdit()
+    .create();
+
+  // 주간 보고: 월요일 09:10 KST
+  ScriptApp.newTrigger("sendSlackWeeklyReport")
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(9)
+    .nearMinute(10)
+    .inTimezone("Asia/Seoul")
+    .create();
+
+  Logger.log("Slack triggers created: onSheetEdit (realtime) + weeklyReport Mon 09:10 KST");
 }
