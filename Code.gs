@@ -173,7 +173,7 @@ var MAP = {
   }
 };
 
-var VERSION = "2026-07-13-slack-v1";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-07-14-slack-v2";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -356,8 +356,8 @@ function buildEmailReport_(type) {
   var subject = "[SMOS] Weekly Onboarding " + (isOps ? "Report" : "Update") + " (" + period + ")";
 
   var corridors = [
-    { key:"KRW", success:["Succeeded"], inprog:["KYC","Ops confirming"], statuses:[{v:"KYC",color:"#D99A0B"},{v:"Ops confirming",color:"#3176FD"},{v:"Succeeded",color:"#00C592"},{v:"Failed",color:"#E5533F"}], fail:["Failed"], gf:"client" },
-    { key:"VND", success:["Approved"], inprog:["In progress"], statuses:[{v:"In progress",color:"#D99A0B"},{v:"Approved",color:"#00C592"},{v:"Rejected / Offboarded",color:"#E5533F"}], fail:["Rejected / Offboarded"], gf:"fiMerchant" }
+    { key:"KRW", success:["Succeeded"], inprog:["Inquiries","KYC","Ops confirming","Legal Approval"], statuses:[{v:"Inquiries",color:"#8A95B5"},{v:"KYC",color:"#D99A0B"},{v:"Ops confirming",color:"#3176FD"},{v:"Legal Approval",color:"#7B61FF"},{v:"Succeeded",color:"#00C592"},{v:"Failed",color:"#E5533F"}], fail:["Failed"], gf:"client" },
+    { key:"VND", success:["Approved"], inprog:["In-progress"], statuses:[{v:"In-progress",color:"#D99A0B"},{v:"Approved",color:"#00C592"},{v:"Rejected / Offboarded",color:"#E5533F"},{v:"Withdrawn",color:"#8A95B5"}], fail:["Rejected / Offboarded","Withdrawn"], gf:"fiMerchant" }
   ];
 
   var plain = "";
@@ -586,7 +586,26 @@ function createWeeklyTrigger() {
 
 /* ============================ Slack Integration ============================ */
 
-var FAIL_STATUSES = { KRW: ["Failed"], VND: ["Rejected / Offboarded"] };
+/*
+ * KRW 플로우: Inquiries → KYC → Ops confirming → Legal Approval → Succeeded / Failed
+ * VND 플로우: In-progress → Approved / Rejected / Withdrawn
+ */
+var CORRIDOR_STATUSES = {
+  KRW: {
+    success:   ["Succeeded"],
+    failed:    ["Failed"],
+    withdrawn: [],
+    progress:  ["KYC", "Ops confirming", "Legal Approval"],
+    all:       ["Inquiries", "KYC", "Ops confirming", "Legal Approval", "Succeeded", "Failed"]
+  },
+  VND: {
+    success:   ["Approved"],
+    failed:    ["Rejected / Offboarded"],
+    withdrawn: ["Withdrawn"],
+    progress:  ["In-progress"],
+    all:       ["In-progress", "Approved", "Rejected / Offboarded", "Withdrawn"]
+  }
+};
 
 function getSlackWebhook_() {
   return PropertiesService.getScriptProperties().getProperty("SLACK_WEBHOOK_URL") || "";
@@ -615,8 +634,12 @@ function onSheetEdit(e) {
   var tab = sheet.getName();
   if (tab !== "KRW" && tab !== "VND") return;
 
-  var row = e.range.getRow();
-  if (row <= 1) return;
+  var cs = CORRIDOR_STATUSES[tab];
+  if (!cs) return;
+
+  var startRow = e.range.getRow();
+  var numRows = e.range.getNumRows();
+  if (startRow <= 1) return;
 
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   var normH = headers.map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
@@ -628,62 +651,113 @@ function onSheetEdit(e) {
     if (normH[i] === "sub merchant name" || normH[i] === "merchant entity name") nameCol = i + 1;
   }
 
-  var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var name = nameCol > 0 ? String(rowData[nameCol - 1]).trim() : "";
-  var mid = midCol > 0 ? String(rowData[midCol - 1]).trim() : "";
-  var status = statusCol > 0 ? String(rowData[statusCol - 1]).trim() : "";
-  if (!name && !mid) return;
+  var editCol = e.range.getColumn();
+  var editColEnd = editCol + e.range.getNumColumns() - 1;
+  var isSingleCell = (numRows === 1 && e.range.getNumColumns() === 1);
 
-  var col = e.range.getColumn();
-  var oldVal = e.oldValue ? String(e.oldValue).trim() : "";
-  var newVal = e.value ? String(e.value).trim() : "";
+  var snap = PropertiesService.getScriptProperties().getProperty("slack_status_snap");
+  var statusSnap = snap ? JSON.parse(snap) : {};
+  var alerts = [];
 
-  // 1) 상태가 Failed/Rejected로 변경됨
-  if (col === statusCol && FAIL_STATUSES[tab] && FAIL_STATUSES[tab].indexOf(status) >= 0) {
-    var reason = "";
-    if (tab === "KRW") {
-      for (var j = 0; j < normH.length; j++) {
-        if (normH[j].indexOf("failed reason") >= 0) { reason = String(rowData[j]).trim(); break; }
+  for (var ri = 0; ri < numRows; ri++) {
+    var row = startRow + ri;
+    if (row <= 1) continue;
+    var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var name = nameCol > 0 ? String(rowData[nameCol - 1]).trim() : "";
+    var mid = midCol > 0 ? String(rowData[midCol - 1]).trim() : "";
+    var status = statusCol > 0 ? String(rowData[statusCol - 1]).trim() : "";
+    if (!name && !mid) continue;
+
+    var rowKey = tab + "-" + row;
+    var prevStatus = statusSnap[rowKey] || "";
+    var statusChanged = status && status !== prevStatus;
+    if (status) statusSnap[rowKey] = status;
+
+    var statusEdited = (statusCol >= editCol && statusCol <= editColEnd);
+    var nameOrMidEdited = (midCol >= editCol && midCol <= editColEnd) || (nameCol >= editCol && nameCol <= editColEnd);
+
+    if (statusEdited && statusChanged) {
+      // 1) Failed — KRW: Failed / VND: Rejected / Offboarded
+      if (cs.failed.indexOf(status) >= 0) {
+        var reason = "";
+        if (tab === "KRW") {
+          for (var j = 0; j < normH.length; j++) {
+            if (normH[j].indexOf("failed reason") >= 0) { reason = String(rowData[j]).trim(); break; }
+          }
+        }
+        alerts.push({ type: "failed", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus, reason: reason });
+        continue;
+      }
+
+      // 2) Withdrawn — VND: Withdrawn
+      if (cs.withdrawn.indexOf(status) >= 0) {
+        alerts.push({ type: "withdrawn", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
+        continue;
+      }
+
+      // 3) Succeeded / Approved — KRW: Succeeded / VND: Approved
+      if (cs.success.indexOf(status) >= 0) {
+        alerts.push({ type: "approved", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
+        continue;
+      }
+
+      // 4) Progress — KRW: KYC, Ops confirming, Legal Approval / VND: In-progress
+      if (cs.progress.indexOf(status) >= 0) {
+        alerts.push({ type: "progress", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
+        continue;
       }
     }
-    var blocks = [
-      { type: "header", text: { type: "plain_text", text: ":rotating_light: Onboarding Failed" } },
-      { type: "section", text: { type: "mrkdwn", text: "*[" + tab + "]* " + (name || "—") + "\n`MID: " + (mid || "—") + "`\n:x: *" + status + "*" + (oldVal ? " (was: " + oldVal + ")" : "") + (reason ? "\nReason: " + reason : "") } },
-      { type: "divider" },
-      { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-    ];
-    sendSlack_({ blocks: blocks });
-    Logger.log("Slack: failed alert — " + tab + " " + (name || mid));
-    return;
+
+    // 5) 새 머천트 (Name+MID가 있고, 이전 상태 기록 없음 = 처음 보는 행)
+    if (name && mid && !prevStatus && (nameOrMidEdited || !isSingleCell)) {
+      alerts.push({ type: "new", tab: tab, name: name, mid: mid, status: status });
+    }
   }
 
-  // 2) 상태가 성공으로 변경됨 (Succeeded / Approved)
-  var SUCCESS = { KRW: ["Succeeded"], VND: ["Approved"] };
-  if (col === statusCol && SUCCESS[tab] && SUCCESS[tab].indexOf(status) >= 0 && oldVal !== status) {
-    var blocks = [
-      { type: "header", text: { type: "plain_text", text: ":tada: Onboarding Approved" } },
-      { type: "section", text: { type: "mrkdwn", text: "*[" + tab + "]* " + (name || "—") + "\n`MID: " + (mid || "—") + "`\n:white_check_mark: *" + status + "*" + (oldVal ? " (was: " + oldVal + ")" : "") } },
-      { type: "divider" },
-      { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-    ];
-    sendSlack_({ blocks: blocks });
-    Logger.log("Slack: approved alert — " + tab + " " + (name || mid));
-    return;
-  }
+  PropertiesService.getScriptProperties().setProperty("slack_status_snap", JSON.stringify(statusSnap));
+  if (!alerts.length) return;
 
-  // 3) 새 머천트 행 (MID 또는 Name이 처음 입력됨)
-  if ((col === midCol || col === nameCol) && newVal && !oldVal) {
-    if (name && mid) {
-      var blocks = [
-        { type: "header", text: { type: "plain_text", text: ":new: New Onboarding Request" } },
-        { type: "section", text: { type: "mrkdwn", text: "*[" + tab + "]* " + name + "\n`MID: " + mid + "`" + (status ? "\nStatus: " + status : "") } },
+  alerts.forEach(function(a) {
+    var blocks;
+    if (a.type === "failed") {
+      blocks = [
+        { type: "header", text: { type: "plain_text", text: ":rotating_light: Onboarding Failed" } },
+        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:x: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") + (a.reason ? "\nReason: " + a.reason : "") } },
         { type: "divider" },
         { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
       ];
-      sendSlack_({ blocks: blocks });
-      Logger.log("Slack: new merchant — " + tab + " " + name);
+    } else if (a.type === "withdrawn") {
+      blocks = [
+        { type: "header", text: { type: "plain_text", text: ":warning: Onboarding Withdrawn" } },
+        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:no_entry_sign: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") } },
+        { type: "divider" },
+        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+      ];
+    } else if (a.type === "approved") {
+      blocks = [
+        { type: "header", text: { type: "plain_text", text: ":tada: Onboarding " + (a.tab === "KRW" ? "Succeeded" : "Approved") } },
+        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:white_check_mark: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") } },
+        { type: "divider" },
+        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+      ];
+    } else if (a.type === "progress") {
+      blocks = [
+        { type: "header", text: { type: "plain_text", text: ":arrow_forward: Status Update" } },
+        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:arrows_counterclockwise: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") } },
+        { type: "divider" },
+        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+      ];
+    } else {
+      blocks = [
+        { type: "header", text: { type: "plain_text", text: ":new: New Onboarding Request" } },
+        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`" + (a.status ? "\nStatus: " + a.status : "") } },
+        { type: "divider" },
+        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+      ];
     }
-  }
+    sendSlack_({ blocks: blocks });
+    Logger.log("Slack: " + a.type + " — " + a.tab + " " + a.name);
+  });
 }
 
 /* ---- 주간 보고 Slack 전송 ---- */
@@ -697,8 +771,8 @@ function sendSlackWeeklyReport() {
   var period = fmt(mon) + " ~ " + fmt(sun);
 
   var corridors = [
-    { key: "KRW", success: ["Succeeded"], fail: ["Failed"] },
-    { key: "VND", success: ["Approved"], fail: ["Rejected / Offboarded"] }
+    { key: "KRW", success: ["Succeeded"], fail: ["Failed"], inprog: ["Inquiries", "KYC", "Ops confirming", "Legal Approval"] },
+    { key: "VND", success: ["Approved"], fail: ["Rejected / Offboarded", "Withdrawn"], inprog: ["In-progress"] }
   ];
 
   var blocks = [
@@ -715,12 +789,14 @@ function sendSlackWeeklyReport() {
     var totalRate = rows.length ? Math.round(totalAppr / rows.length * 100) : 0;
     var weekAppr = weekRows.filter(function(r) { return c.success.indexOf(r.status) >= 0; }).length;
     var weekFail = weekRows.filter(function(r) { return c.fail.indexOf(r.status) >= 0; }).length;
+    var totalInProg = rows.filter(function(r) { return c.inprog.indexOf(r.status) >= 0; }).length;
 
     var txt = "*[" + c.key + "]*\n";
     txt += ":busts_in_silhouette: Total: *" + rows.length + "*건 · Approval rate: *" + totalRate + "%* (" + totalAppr + "/" + rows.length + ")\n";
+    txt += ":hourglass_flowing_sand: In progress: *" + totalInProg + "*건\n";
     txt += ":calendar: This week: *" + weekRows.length + "*건 신규";
     if (weekAppr) txt += " · :white_check_mark: " + weekAppr + " approved";
-    if (weekFail) txt += " · :x: " + weekFail + " failed";
+    if (weekFail) txt += " · :x: " + weekFail + " failed/rejected";
     blocks.push({ type: "section", text: { type: "mrkdwn", text: txt } });
   });
 
@@ -740,8 +816,9 @@ function createSlackTriggers() {
   }
 
   // 실시간 감지: Installable onEdit (시트 편집 즉시 발동)
+  var ss = SpreadsheetApp.openById(getSheetId_());
   ScriptApp.newTrigger("onSheetEdit")
-    .forSpreadsheet(getSheetId_())
+    .forSpreadsheet(ss)
     .onEdit()
     .create();
 
@@ -755,4 +832,26 @@ function createSlackTriggers() {
     .create();
 
   Logger.log("Slack triggers created: onSheetEdit (realtime) + weeklyReport Mon 09:10 KST");
+}
+
+/* ---- 기존 데이터 상태 스냅샷 초기화 (1회 실행 — 기존 행을 "이미 본 것"으로 마킹) ---- */
+function initStatusSnapshot() {
+  var snap = {};
+  ["KRW", "VND"].forEach(function(key) {
+    var sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(key);
+    if (!sh) return;
+    var vals = sh.getDataRange().getValues();
+    var headers = vals[0].map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
+    var statusCol = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i].indexOf("onboarding status") >= 0) { statusCol = i; break; }
+    }
+    if (statusCol < 0) return;
+    for (var r = 1; r < vals.length; r++) {
+      var s = String(vals[r][statusCol]).trim();
+      if (s) snap[key + "-" + (r + 1)] = s;
+    }
+  });
+  PropertiesService.getScriptProperties().setProperty("slack_status_snap", JSON.stringify(snap));
+  Logger.log("Status snapshot initialized: " + Object.keys(snap).length + " rows marked as seen");
 }
