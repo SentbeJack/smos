@@ -565,11 +565,11 @@ function stepOf(r){
   states[0]="done";
   if(active==="KRW"){
     if(r.status==="KYC"||r.status==="Ops confirming"){ states[1]="active"; }
-    else if(r.status==="Succeeded"){ states[1]="done"; states[2]="done"; if(r.va) states[3]="done"; }
+    else if(r.status==="Succeeded"){ states[1]="done"; states[2]="done"; if(r.va&&r.va!=="N") states[3]="done"; }
     else if(r.status==="Failed"){ states[1]="done"; states[2]="fail"; }
   } else if(active==="VND"){
     if(r.status==="In progress"){ states[1]="active"; }
-    else if(r.status==="Approved"){ states[1]="done"; states[2]="done"; if(r.va) states[3]="done"; }
+    else if(r.status==="Approved"){ states[1]="done"; states[2]="done"; if(r.va&&r.va!=="N") states[3]="done"; }
     else if(r.status==="Rejected / Offboarded"){ states[1]="done"; states[2]="fail"; }
   }
   return {states, steps:c.steps};

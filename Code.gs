@@ -149,8 +149,8 @@ var MAP = {
       ticket: "Ticket URL",
       status: "Onboarding Status",
       kybReason: "KYB Failed Reason",
-      va: "VA",
-      vaStatus: "VA Status",
+      va: ["가상 계좌 여부", "VA"],
+      vaStatus: ["VA Status", "Notification"],
       note: "Onboarding Note"
     }
   },
