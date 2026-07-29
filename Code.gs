@@ -309,9 +309,10 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) || "";
 
   if (action === "forecast") {
+    var forecast = readForecastTab_("Onboarding Request Forecast Dashboard");
     var data = {
-      KRW: readForecastTab_("KRW Collection"),
-      VND: readForecastTab_("VND Collection")
+      KRW: forecast,
+      VND: forecast
     };
     data._version = VERSION;
     data._user = userInfo;
