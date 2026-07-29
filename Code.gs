@@ -234,15 +234,33 @@ function readTab(cfg, dbg) {
   return out;
 }
 
-function readForecastTab_(tabName) {
+function readAllForecast_(tabName) {
   var sh;
   try { sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(tabName); } catch(e) {}
-  if (!sh) return null;
+  if (!sh) return { KRW: null, VND: null };
   var vals = sh.getDataRange().getValues();
-  if (vals.length < 5) return null;
+  if (vals.length < 5) return { KRW: null, VND: null };
 
+  var sections = [];
+  for (var r = 0; r < vals.length; r++) {
+    for (var c = 0; c < Math.min(vals[r].length, 3); c++) {
+      var cell = String(vals[r][c]).trim();
+      if (/KRW\s*Collection/i.test(cell)) sections.push({ key: "KRW", row: r });
+      else if (/VND\s*Collection/i.test(cell)) sections.push({ key: "VND", row: r });
+    }
+  }
+
+  var result = { KRW: null, VND: null };
+  for (var si = 0; si < sections.length; si++) {
+    var endRow = (si + 1 < sections.length) ? sections[si + 1].row : vals.length;
+    result[sections[si].key] = parseForecastSection_(vals, sections[si].row, endRow);
+  }
+  return result;
+}
+
+function parseForecastSection_(vals, startRow, endRow) {
   var typeCol = -1, firstDataRow = -1;
-  for (var r = 0; r < Math.min(vals.length, 10); r++) {
+  for (var r = startRow; r < Math.min(endRow, startRow + 10); r++) {
     for (var c = 0; c < vals[r].length; c++) {
       if (String(vals[r][c]).trim().toLowerCase() === "prediction") {
         typeCol = c; firstDataRow = r; break;
@@ -254,7 +272,7 @@ function readForecastTab_(tabName) {
 
   var clientStartCol = typeCol + 1;
   var clients = [];
-  for (var hr = firstDataRow - 1; hr >= Math.max(0, firstDataRow - 3); hr--) {
+  for (var hr = firstDataRow - 1; hr >= Math.max(startRow, firstDataRow - 3); hr--) {
     for (var c = clientStartCol; c < vals[hr].length; c++) {
       var name = String(vals[hr][c]).trim();
       if (name && !/^\d{4}$/.test(name) && name.toLowerCase() !== "month") {
@@ -268,12 +286,12 @@ function readForecastTab_(tabName) {
   var monthCol = typeCol > 0 ? typeCol - 1 : 0;
   var result = { clients: clients.map(function(c){ return c.name; }), total: {}, months: [] };
   var r = firstDataRow;
-  while (r < vals.length) {
+  while (r < endRow) {
     var rowType = String(vals[r][typeCol]).trim().toLowerCase();
     if (rowType !== "prediction") { r++; continue; }
     var monthId = String(vals[r][monthCol]).trim().toLowerCase();
     var prediction = clients.map(function(c){ return Number(vals[r][c.col]) || 0; });
-    var actual = (r + 1 < vals.length) ? clients.map(function(c){ return Number(vals[r+1][c.col]) || 0; }) : [];
+    var actual = (r + 1 < endRow) ? clients.map(function(c){ return Number(vals[r+1][c.col]) || 0; }) : [];
     if (monthId === "total" || monthId === "") {
       if (!result.total.prediction) result.total = { prediction: prediction, actual: actual };
     } else {
@@ -309,10 +327,10 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) || "";
 
   if (action === "forecast") {
-    var forecast = readForecastTab_("Onboarding Request Forecast Dashboard");
+    var forecast = readAllForecast_("Onboarding Request Forecast Dashboard");
     var data = {
-      KRW: forecast,
-      VND: forecast
+      KRW: forecast.KRW,
+      VND: forecast.VND
     };
     data._version = VERSION;
     data._user = userInfo;
