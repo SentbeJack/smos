@@ -234,28 +234,20 @@ function readTab(cfg, dbg) {
   return out;
 }
 
-function readAllForecast_(tabName) {
-  var sh;
-  try { sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(tabName); } catch(e) {}
-  if (!sh) return { KRW: null, VND: null };
+function readAllForecast_() {
+  var ss = SpreadsheetApp.openById(getSheetId_());
+  return {
+    KRW: readForecastTab_(ss, "[KRW] Onboarding Request Forecast Dashboard"),
+    VND: readForecastTab_(ss, "[VND] Onboarding Request Forecast Dashboard")
+  };
+}
+
+function readForecastTab_(ss, tabName) {
+  var sh = ss.getSheetByName(tabName);
+  if (!sh) return null;
   var vals = sh.getDataRange().getValues();
-  if (vals.length < 5) return { KRW: null, VND: null };
-
-  var sections = [];
-  for (var r = 0; r < vals.length; r++) {
-    for (var c = 0; c < Math.min(vals[r].length, 3); c++) {
-      var cell = String(vals[r][c]).trim();
-      if (/KRW\s*Collection/i.test(cell)) sections.push({ key: "KRW", row: r });
-      else if (/VND\s*Collection/i.test(cell)) sections.push({ key: "VND", row: r });
-    }
-  }
-
-  var result = { KRW: null, VND: null };
-  for (var si = 0; si < sections.length; si++) {
-    var endRow = (si + 1 < sections.length) ? sections[si + 1].row : vals.length;
-    result[sections[si].key] = parseForecastSection_(vals, sections[si].row, endRow);
-  }
-  return result;
+  if (vals.length < 5) return null;
+  return parseForecastSection_(vals, 0, vals.length);
 }
 
 function parseForecastSection_(vals, startRow, endRow) {
@@ -327,7 +319,7 @@ function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) || "";
 
   if (action === "forecast") {
-    var forecast = readAllForecast_("Onboarding Request Forecast Dashboard");
+    var forecast = readAllForecast_();
     var data = {
       KRW: forecast.KRW,
       VND: forecast.VND
