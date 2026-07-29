@@ -234,6 +234,60 @@ function readTab(cfg, dbg) {
   return out;
 }
 
+function readForecastTab_(tabName) {
+  var sh;
+  try { sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(tabName); } catch(e) {}
+  if (!sh) return null;
+  var vals = sh.getDataRange().getValues();
+  if (vals.length < 5) return null;
+
+  var typeCol = -1, firstDataRow = -1;
+  for (var r = 0; r < Math.min(vals.length, 10); r++) {
+    for (var c = 0; c < vals[r].length; c++) {
+      if (String(vals[r][c]).trim().toLowerCase() === "prediction") {
+        typeCol = c; firstDataRow = r; break;
+      }
+    }
+    if (typeCol >= 0) break;
+  }
+  if (typeCol < 0) return null;
+
+  var clientStartCol = typeCol + 1;
+  var clients = [];
+  for (var hr = firstDataRow - 1; hr >= Math.max(0, firstDataRow - 3); hr--) {
+    for (var c = clientStartCol; c < vals[hr].length; c++) {
+      var name = String(vals[hr][c]).trim();
+      if (name && !/^\d{4}$/.test(name) && name.toLowerCase() !== "month") {
+        clients.push({ col: c, name: name });
+      }
+    }
+    if (clients.length > 0) break;
+  }
+  if (clients.length === 0) return null;
+
+  var monthCol = typeCol > 0 ? typeCol - 1 : 0;
+  var result = { clients: clients.map(function(c){ return c.name; }), total: {}, months: [] };
+  var r = firstDataRow;
+  while (r < vals.length) {
+    var rowType = String(vals[r][typeCol]).trim().toLowerCase();
+    if (rowType !== "prediction") { r++; continue; }
+    var monthId = String(vals[r][monthCol]).trim().toLowerCase();
+    var prediction = clients.map(function(c){ return Number(vals[r][c.col]) || 0; });
+    var actual = (r + 1 < vals.length) ? clients.map(function(c){ return Number(vals[r+1][c.col]) || 0; }) : [];
+    if (monthId === "total" || monthId === "") {
+      if (!result.total.prediction) result.total = { prediction: prediction, actual: actual };
+    } else {
+      var monthNum = parseInt(monthId);
+      if (monthNum >= 1 && monthNum <= 12) {
+        result.months.push({ month: monthNum, prediction: prediction, actual: actual });
+      }
+    }
+    r += 3;
+  }
+  result.months.sort(function(a,b){ return a.month - b.month; });
+  return result;
+}
+
 function jsonOut_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
@@ -250,6 +304,18 @@ function doGet(e) {
   var users = readUsersTab_();
   for (var i = 0; i < users.length; i++) {
     if (users[i].email === user.email) { userInfo.role = users[i].role; break; }
+  }
+
+  var action = (e && e.parameter && e.parameter.action) || "";
+
+  if (action === "forecast") {
+    var data = {
+      KRW: readForecastTab_("KRW Collection"),
+      VND: readForecastTab_("VND Collection")
+    };
+    data._version = VERSION;
+    data._user = userInfo;
+    return jsonOut_(data);
   }
 
   var data = { KRW: readTab(MAP.KRW, {}), VND: readTab(MAP.VND, {}) };
