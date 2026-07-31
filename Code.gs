@@ -704,99 +704,72 @@ function sendSlack_(payload) {
   } catch (e) { Logger.log("Slack fetch error: " + e); return false; }
 }
 
-/* ---- 실시간 onEdit 핸들러 (Installable trigger로 등록) ---- */
-function onSheetEdit(e) {
-  if (!e || !e.range) { Logger.log("onSheetEdit: no event or range"); return; }
-  var sheet = e.range.getSheet();
-  var tab = sheet.getName();
-  Logger.log("onSheetEdit fired: tab=" + tab + " row=" + e.range.getRow() + " col=" + e.range.getColumn() + " cols=" + e.range.getNumColumns() + " rows=" + e.range.getNumRows());
-  if (tab !== "KRW" && tab !== "VND") { Logger.log("onSheetEdit: skip non-target tab"); return; }
-
-  var cs = CORRIDOR_STATUSES[tab];
-  if (!cs) return;
-
-  var startRow = e.range.getRow();
-  var numRows = e.range.getNumRows();
-  if (startRow <= 1) return;
-
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var normH = headers.map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
-
-  var statusCol = -1, nameCol = -1, midCol = -1;
-  for (var i = 0; i < normH.length; i++) {
-    if (normH[i].indexOf("onboarding status") >= 0) statusCol = i + 1;
-    if (normH[i] === "merchant id") midCol = i + 1;
-    if (normH[i] === "sub merchant name" || normH[i] === "merchant entity name") nameCol = i + 1;
-  }
-  Logger.log("onSheetEdit columns: statusCol=" + statusCol + " nameCol=" + nameCol + " midCol=" + midCol);
-
-  var editCol = e.range.getColumn();
-  var editColEnd = editCol + e.range.getNumColumns() - 1;
-  var isSingleCell = (numRows === 1 && e.range.getNumColumns() === 1);
-
+/* ---- 폴링 방식 상태 변경 감지 (TimeBased trigger, IMPORTRANGE 호환) ---- */
+function pollStatusChanges() {
+  var ss = SpreadsheetApp.openById(getSheetId_());
   var snap = PropertiesService.getScriptProperties().getProperty("slack_status_snap");
   var statusSnap = snap ? JSON.parse(snap) : {};
   var alerts = [];
 
-  for (var ri = 0; ri < numRows; ri++) {
-    var row = startRow + ri;
-    if (row <= 1) continue;
-    var rowData = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var name = nameCol > 0 ? String(rowData[nameCol - 1]).trim() : "";
-    var mid = midCol > 0 ? String(rowData[midCol - 1]).trim() : "";
-    var status = statusCol > 0 ? String(rowData[statusCol - 1]).trim() : "";
-    if (!name && !mid) continue;
+  ["KRW", "VND"].forEach(function(tab) {
+    var sh = ss.getSheetByName(tab);
+    if (!sh) return;
+    var cs = CORRIDOR_STATUSES[tab];
+    if (!cs) return;
 
-    var rowKey = tab + "-" + row;
-    var prevStatus = statusSnap[rowKey] || "";
-    var statusChanged = status && status !== prevStatus;
-    if (status) statusSnap[rowKey] = status;
+    var vals = sh.getDataRange().getValues();
+    if (vals.length < 2) return;
+    var headers = vals[0].map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
 
-    var statusEdited = (statusCol >= editCol && statusCol <= editColEnd);
-    var nameOrMidEdited = (midCol >= editCol && midCol <= editColEnd) || (nameCol >= editCol && nameCol <= editColEnd);
+    var statusCol = -1, nameCol = -1, midCol = -1;
+    for (var i = 0; i < headers.length; i++) {
+      if (headers[i].indexOf("onboarding status") >= 0) statusCol = i;
+      if (headers[i] === "merchant id") midCol = i;
+      if (headers[i] === "sub merchant name" || headers[i] === "merchant entity name") nameCol = i;
+    }
+    if (statusCol < 0) { Logger.log(tab + ": status column not found"); return; }
 
-    Logger.log("onSheetEdit row " + row + ": name=" + name + " mid=" + mid + " status=" + status + " prev=" + prevStatus + " statusEdited=" + statusEdited + " statusChanged=" + statusChanged);
+    var failReasonCol = -1;
+    if (tab === "KRW") {
+      for (var j = 0; j < headers.length; j++) {
+        if (headers[j].indexOf("failed reason") >= 0) { failReasonCol = j; break; }
+      }
+    }
 
-    if (statusEdited && statusChanged) {
-      // 1) Failed — KRW: Failed / VND: Rejected / Offboarded
+    for (var r = 1; r < vals.length; r++) {
+      var row = vals[r];
+      var name = nameCol >= 0 ? String(row[nameCol]).trim() : "";
+      var mid = midCol >= 0 ? String(row[midCol]).trim() : "";
+      var status = String(row[statusCol]).trim();
+      if (!name && !mid) continue;
+      if (!status) continue;
+
+      var rowKey = tab + "-" + (r + 1);
+      var prevStatus = statusSnap[rowKey] || "";
+
+      if (status === prevStatus) continue;
+      statusSnap[rowKey] = status;
+
+      if (!prevStatus) {
+        alerts.push({ type: "new", tab: tab, name: name || "—", mid: mid || "—", status: status });
+        continue;
+      }
+
       if (cs.failed.indexOf(status) >= 0) {
-        var reason = "";
-        if (tab === "KRW") {
-          for (var j = 0; j < normH.length; j++) {
-            if (normH[j].indexOf("failed reason") >= 0) { reason = String(rowData[j]).trim(); break; }
-          }
-        }
+        var reason = failReasonCol >= 0 ? String(row[failReasonCol]).trim() : "";
         alerts.push({ type: "failed", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus, reason: reason });
-        continue;
-      }
-
-      // 2) Withdrawn — VND: Withdrawn
-      if (cs.withdrawn.indexOf(status) >= 0) {
+      } else if (cs.withdrawn.indexOf(status) >= 0) {
         alerts.push({ type: "withdrawn", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
-        continue;
-      }
-
-      // 3) Succeeded / Approved — KRW: Succeeded / VND: Approved
-      if (cs.success.indexOf(status) >= 0) {
+      } else if (cs.success.indexOf(status) >= 0) {
         alerts.push({ type: "approved", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
-        continue;
-      }
-
-      // 4) Progress — KRW: KYC, Ops confirming, Legal Approval / VND: In-progress
-      if (cs.progress.indexOf(status) >= 0) {
+      } else if (cs.progress.indexOf(status) >= 0) {
         alerts.push({ type: "progress", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
-        continue;
       }
     }
-
-    // 5) 새 머천트 (Name+MID가 있고, 이전 상태 기록 없음 = 처음 보는 행)
-    if (name && mid && !prevStatus && (nameOrMidEdited || !isSingleCell)) {
-      alerts.push({ type: "new", tab: tab, name: name, mid: mid, status: status });
-    }
-  }
+  });
 
   PropertiesService.getScriptProperties().setProperty("slack_status_snap", JSON.stringify(statusSnap));
-  Logger.log("onSheetEdit: " + alerts.length + " alerts to send");
+  Logger.log("pollStatusChanges: " + alerts.length + " changes detected");
   if (!alerts.length) return;
 
   alerts.forEach(function(a) {
@@ -894,19 +867,15 @@ function createSlackTriggers() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = triggers.length - 1; i >= 0; i--) {
     var fn = triggers[i].getHandlerFunction();
-    if (fn === "onSheetEdit" || fn === "sendSlackWeeklyReport") {
+    if (fn === "onSheetEdit" || fn === "sendSlackWeeklyReport" || fn === "pollStatusChanges") {
       ScriptApp.deleteTrigger(triggers[i]);
       Logger.log("Deleted old trigger: " + fn);
     }
   }
 
-  var ss = SpreadsheetApp.getActive();
-  Logger.log("Binding trigger to: " + (ss ? ss.getName() + " (" + ss.getId() + ")" : "null — fallback to openById"));
-  if (!ss) ss = SpreadsheetApp.openById(getSheetId_());
-
-  ScriptApp.newTrigger("onSheetEdit")
-    .forSpreadsheet(ss)
-    .onEdit()
+  ScriptApp.newTrigger("pollStatusChanges")
+    .timeBased()
+    .everyMinutes(1)
     .create();
 
   ScriptApp.newTrigger("sendSlackWeeklyReport")
