@@ -152,6 +152,10 @@ Sales 폰/PC
 
 ## 배포 기록 (Changelog)
 
+### v6.1 — 2026-08-02
+- **보안: JWT fallback 제거** — tokeninfo API 실패 시 서명 미검증 fallback을 제거하고 인증 거부로 변경
+- BACKEND_URL 업데이트
+
 ### v6.0 — 2026-08-02
 - **P1: 머천트 카드 step tracker 항상 노출**
   - step tracker를 detail 내부 → item-row 아래로 이동 (접힌 상태에서도 보임)

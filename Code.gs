@@ -47,14 +47,8 @@ function verifyToken_(token) {
     // UrlFetchApp 스코프 미부여 시 fallback으로 전환
   }
 
-  // 4) Fallback: JWT claims 검증 (서명 미검증 — 내부 도구 한정 허용)
-  if (!result) {
-    if (payload.aud !== GOOGLE_CLIENT_ID) return null;
-    if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") return null;
-    if (!payload.iat || payload.iat > now + 300) return null;
-    if (payload.email_verified !== true) return null;
-    result = { email: payload.email.toLowerCase(), domain: payload.email.toLowerCase().split("@")[1] || "" };
-  }
+  // 4) tokeninfo 실패 시 인증 거부 (서명 미검증 fallback 제거)
+  if (!result) return null;
 
   // 5) 검증 결과 캐시 (토큰 남은 수명, 최대 600초)
   var ttl = Math.min(Math.max(payload.exp - now, 0), 600);
