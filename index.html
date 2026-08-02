@@ -439,6 +439,10 @@ const STRINGS = {
     dashApprovalByClient:"클라이언트별 승인률",
     dashFunnelSection:"온보딩 퍼널", dashFunnelTotal:"전체", dashFunnelRate:"완료율",
     dashWeeklySection:"주간 현황", dashMonthlySection:"월별 현황",
+    fcLoading:"데이터 로딩 중...", fcNoData:"이 코리도에 Forecast 데이터가 없습니다.", fcFetchFail:"Forecast 데이터를 불러올 수 없습니다.",
+    fcMonths:["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"],
+    fcUntil:"까지", fcItems:"건", fcYtd:"연간 달성", fcMonthlyChart:"월별 Prediction vs Actual", fcOver:"초과",
+    fcClientSection:"클라이언트별 현황 (YTD)", fcMonthDetail:"월별 상세",
     dashWeeklyApproval:"금주 승인률", dashWeeklyClient:"금주 클라이언트별",
     weeklyReport:"주간 보고", reportTitle:"주간 온보딩 실적 보고",
     reportPeriod:"기간", reportCorridor:"코리도", reportSummary:"요약",
@@ -503,6 +507,10 @@ const STRINGS = {
     dashApprovalByClient:"Approval Rate by Client",
     dashFunnelSection:"Onboarding Funnel", dashFunnelTotal:"Total", dashFunnelRate:"Completion",
     dashWeeklySection:"Weekly", dashMonthlySection:"Monthly",
+    fcLoading:"Loading data...", fcNoData:"No forecast data for this corridor.", fcFetchFail:"Failed to load forecast data.",
+    fcMonths:["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+    fcUntil:"", fcItems:" items", fcYtd:"Annual achievement", fcMonthlyChart:"Monthly Prediction vs Actual", fcOver:"Over",
+    fcClientSection:"Client breakdown (YTD)", fcMonthDetail:"Monthly detail",
     dashWeeklyApproval:"This Week Approval Rate", dashWeeklyClient:"This Week by Client",
     weeklyReport:"Weekly Report", reportTitle:"Weekly Onboarding Report",
     reportPeriod:"Period", reportCorridor:"Corridor", reportSummary:"Summary",
@@ -1057,7 +1065,7 @@ $("#viewToggle").addEventListener("click",e=>{
 async function fetchForecast(){
   if(!Auth.loggedIn||!BACKEND_URL) return;
   if(forecastData){ renderForecast(); return; }
-  $("#forecastPanel").innerHTML='<div class="fc-loading">데이터 로딩 중...</div>';
+  $("#forecastPanel").innerHTML=`<div class="fc-loading">${L("fcLoading")}</div>`;
   try{
     const url=BACKEND_URL+"?token="+encodeURIComponent(Auth.token)+"&action=forecast";
     const r=await fetch(url);
@@ -1065,7 +1073,7 @@ async function fetchForecast(){
     if(j.error) return;
     forecastData=j;
     renderForecast();
-  }catch(e){ console.error("forecast fetch",e); $("#forecastPanel").innerHTML='<div class="fc-loading">Forecast 데이터를 불러올 수 없습니다.</div>'; }
+  }catch(e){ console.error("forecast fetch",e); $("#forecastPanel").innerHTML=`<div class="fc-loading">${L("fcFetchFail")}</div>`; }
 }
 
 function renderForecast(){
@@ -1078,8 +1086,8 @@ function renderForecast(){
   if(!forecastData){ fetchForecast(); return; }
   const d=forecastData[active];
   const panel=$("#forecastPanel");
-  if(!d||!d.clients){ panel.innerHTML='<div class="fc-loading">이 코리도에 Forecast 데이터가 없습니다.</div>'; return; }
-  const MN=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  if(!d||!d.clients){ panel.innerHTML=`<div class="fc-loading">${L("fcNoData")}</div>`; return; }
+  const MN=L("fcMonths");
   const now=new Date(), cm=now.getMonth();
   const clients=d.clients, months=d.months||[];
   const mp=new Array(12).fill(0), ma=new Array(12).fill(0);
@@ -1093,23 +1101,23 @@ function renderForecast(){
   const diff=ya-yp, ds=diff>=0?'+':'';
   let h='';
   h+=`<div class="fc-summary">
-    <div class="fc-stat"><div class="fc-lbl">Prediction</div><div class="fc-val" style="color:var(--accent)">${yp}</div><div class="fc-sub">YTD (${MN[cm]}까지)</div></div>
-    <div class="fc-stat"><div class="fc-lbl">Actual</div><div class="fc-val" style="color:${ya>yp?'var(--s-rej-d)':'var(--s-live-d)'}">${ya}</div><div class="fc-sub">${ds}${diff}건</div></div>
+    <div class="fc-stat"><div class="fc-lbl">Prediction</div><div class="fc-val" style="color:var(--accent)">${yp}</div><div class="fc-sub">YTD (${MN[cm]}${L("fcUntil")?` ${L("fcUntil")}`:``})</div></div>
+    <div class="fc-stat"><div class="fc-lbl">Actual</div><div class="fc-val" style="color:${ya>yp?'var(--s-rej-d)':'var(--s-live-d)'}">${ya}</div><div class="fc-sub">${ds}${diff}${L("fcItems")}</div></div>
     <div class="fc-stat"><div class="fc-lbl">Accuracy</div><div class="fc-val" style="color:${acc>=80?'var(--s-live-d)':acc>=30?'var(--s-rev-d)':'var(--s-rej-d)'}">${acc.toFixed(1)}%</div><div class="fc-sub">Actual / Pred</div></div>
   </div>`;
-  h+=`<div class="fc-ytd"><div class="fc-ytd-lbl">연간 달성</div><div class="fc-ytd-bar"><div class="fc-ytd-fill" style="width:${Math.min(yPct,100).toFixed(1)}%"></div></div><div class="fc-ytd-pct">${yPct.toFixed(1)}%</div></div>`;
+  h+=`<div class="fc-ytd"><div class="fc-ytd-lbl">${L("fcYtd")}</div><div class="fc-ytd-bar"><div class="fc-ytd-fill" style="width:${Math.min(yPct,100).toFixed(1)}%"></div></div><div class="fc-ytd-pct">${yPct.toFixed(1)}%</div></div>`;
   const mx=Math.max(...mp.slice(0,cm+1),...ma.slice(0,cm+1),1);
-  h+=`<div class="fc-sec">월별 Prediction vs Actual</div><div class="fc-chart">`;
+  h+=`<div class="fc-sec">${L("fcMonthlyChart")}</div><div class="fc-chart">`;
   for(let i=0;i<=cm;i++){
     const pW=mp[i]/mx*100, aW=ma[i]/mx*100, over=ma[i]>mp[i];
     h+=`<div class="fc-mrow"><div class="fc-mlbl">${MN[i]}</div><div class="fc-mbars"><div class="fc-mbar" style="width:${Math.max(pW,1)}%;background:var(--accent);opacity:.25"></div><div class="fc-mbar" style="width:${Math.max(aW,1)}%;background:${over?'var(--s-rej-d)':'var(--s-live-d)'}"></div></div><div class="fc-mval">${mp[i]} / ${ma[i]}</div></div>`;
   }
-  h+=`<div class="fc-legend"><span><div class="fc-dot" style="background:var(--accent);opacity:.35"></div>Prediction</span><span><div class="fc-dot" style="background:var(--s-live-d)"></div>Actual</span><span><div class="fc-dot" style="background:var(--s-rej-d)"></div>초과</span></div></div>`;
+  h+=`<div class="fc-legend"><span><div class="fc-dot" style="background:var(--accent);opacity:.35"></div>Prediction</span><span><div class="fc-dot" style="background:var(--s-live-d)"></div>Actual</span><span><div class="fc-dot" style="background:var(--s-rej-d)"></div>${L("fcOver")}</span></div></div>`;
   const cd=clients.map((name,ci)=>{let p=0,a=0;months.forEach(m=>{if(m.month-1<=cm){p+=m.prediction[ci]||0;a+=m.actual[ci]||0;}});const ac=p>0?(a/p*100):(a>0?999:0);return{name,pred:p,actual:a,acc:ac};}).filter(c=>c.pred>0||c.actual>0).sort((a,b)=>b.actual-a.actual);
-  h+=`<div class="fc-sec">클라이언트별 현황 (YTD)</div><div class="fc-tbl"><table><tr><th>Client</th><th>Pred</th><th>Actual</th><th>Accuracy</th></tr>`;
+  h+=`<div class="fc-sec">${L("fcClientSection")}</div><div class="fc-tbl"><table><tr><th>Client</th><th>Pred</th><th>Actual</th><th>Accuracy</th></tr>`;
   cd.forEach(c=>{const cls=c.acc>=80?'fc-bg':c.acc>=30?'fc-by':c.acc>0?'fc-br':'fc-by';const at=c.pred===0&&c.actual>0?'N/A':c.acc>=999?'N/A':c.acc.toFixed(0)+'%';h+=`<tr><td>${esc(c.name)}</td><td>${c.pred}</td><td style="font-weight:700">${c.actual}</td><td><span class="fc-badge ${cls}">${at}</span></td></tr>`;});
   h+=`</table></div>`;
-  h+=`<div class="fc-sec">월별 상세</div>`;
+  h+=`<div class="fc-sec">${L("fcMonthDetail")}</div>`;
   for(let i=cm;i>=0;i--){
     const m=months.find(x=>x.month===i+1); if(!m) continue;
     const mP=m.prediction.reduce((a,b)=>a+b,0), mA=m.actual.reduce((a,b)=>a+b,0);
