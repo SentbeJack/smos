@@ -111,10 +111,8 @@
   .va-copy .copy-ic{color:var(--accent); flex:none; opacity:.5;}
   .url-chip{font-size:10px; font-weight:650; color:var(--accent); background:var(--accent-tint); padding:2px 7px; border-radius:5px; text-decoration:none; white-space:nowrap; display:inline-flex; align-items:center; gap:2px;}
   .url-chip:active{background:#E1E5FB;}
-  .step-tag{font-family:var(--mono); font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:4px; white-space:nowrap; color:var(--accent); background:var(--accent-tint);}
-  .step-tag.step-fail{color:var(--s-rej-t); background:var(--s-rej-b);}
-  .step-tag.step-done{color:var(--s-live-t); background:var(--s-live-b);}
-  .tracker{display:flex; align-items:flex-start; padding:6px 0 10px;}
+
+  .tracker{display:flex; align-items:flex-start; padding:6px 12px 10px; margin:0 4px; border-top:1px solid var(--border);}
   .trk-step{display:flex; flex-direction:column; align-items:center; gap:4px; flex:none; min-width:38px;}
   .trk-dot{width:10px; height:10px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface);}
   .trk-step.done .trk-dot{background:var(--s-live-d); border-color:var(--s-live-d);}
@@ -215,6 +213,10 @@
   .dash-bar-track{flex:1; height:20px; background:var(--surface-2); border-radius:6px; overflow:hidden;}
   .dash-bar-fill{height:100%; border-radius:6px; min-width:2px;}
   .dash-bar-val{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted); flex:none; min-width:24px; text-align:right;}
+  .funnel-summary{display:flex; gap:8px; margin-bottom:12px;}
+  .funnel-stat{flex:1; background:var(--surface-2); border-radius:var(--radius); padding:12px 10px; text-align:center;}
+  .funnel-stat-val{font-size:22px; font-weight:800; font-family:var(--mono);}
+  .funnel-stat-lbl{font-size:10px; font-weight:600; color:var(--muted); margin-top:2px;}
   .dash-chart{width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch;}
   .dash-chart svg{display:block; width:100%; height:auto;}
   .dash-legend{display:flex; gap:14px; margin-top:10px; font-size:11px; color:var(--muted);}
@@ -435,6 +437,7 @@ const STRINGS = {
     dashNoDate:"날짜 없는 항목 제외",
     dashApproval:"월별 승인률", dashApproved:"승인",
     dashApprovalByClient:"클라이언트별 승인률",
+    dashFunnelSection:"온보딩 퍼널", dashFunnelTotal:"전체", dashFunnelRate:"완료율",
     dashWeeklySection:"주간 현황", dashMonthlySection:"월별 현황",
     dashWeeklyApproval:"금주 승인률", dashWeeklyClient:"금주 클라이언트별",
     weeklyReport:"주간 보고", reportTitle:"주간 온보딩 실적 보고",
@@ -498,6 +501,7 @@ const STRINGS = {
     dashNoDate:"Items without dates excluded",
     dashApproval:"Monthly Approval Rate", dashApproved:"Approved",
     dashApprovalByClient:"Approval Rate by Client",
+    dashFunnelSection:"Onboarding Funnel", dashFunnelTotal:"Total", dashFunnelRate:"Completion",
     dashWeeklySection:"Weekly", dashMonthlySection:"Monthly",
     dashWeeklyApproval:"This Week Approval Rate", dashWeeklyClient:"This Week by Client",
     weeklyReport:"Weekly Report", reportTitle:"Weekly Onboarding Report",
@@ -629,17 +633,6 @@ function stepOf(r){
     else if(r.status==="Rejected / Offboarded"){ states[1]="done"; states[2]="fail"; }
   }
   return {states, steps:c.steps};
-}
-function stepTag(r){
-  const info=stepOf(r); if(!info) return "";
-  const {states,steps}=info;
-  const ai=states.indexOf("active"), fi=states.indexOf("fail");
-  const sLbl=s=>lang==="EN"?(s.labelEn||s.label):s.label;
-  if(fi>=0) return `<span class="step-tag step-fail">${sLbl(steps[fi])} ✕</span>`;
-  if(ai>=0) return `<span class="step-tag">${ai+1}/${steps.length} ${sLbl(steps[ai])}</span>`;
-  const done=states.filter(s=>s==="done").length;
-  if(done===steps.length) return "";
-  return `<span class="step-tag step-done">${done}/${steps.length}</span>`;
 }
 function stepTracker(r){
   const info=stepOf(r); if(!info) return "";
@@ -778,7 +771,6 @@ function itemHTML(r){
         <div class="item-sub">
           ${mid?`<span class="mid">${esc(mid)}</span>`:``}
           ${(()=>{const bc=colOf("bank"); return bc&&r[bc.field]?`<span class="bank-chip">${esc(r[bc.field])}</span>`:``})()}
-          ${stepTag(r)}
           ${r.va?`<span class="va-flag va-yes" data-act="copy-va" data-va="${esc(r.va)}">VA ✓</span>`:``}
           ${reason?`<span class="reason-chip">${esc(reason)}</span>`:``}
           ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>{const u=r[c.field],href=/^https?:\/\//i.test(u)?u:"https://"+u; return `<a class="url-chip" href="${esc(href)}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`;}).join("")}
@@ -786,8 +778,8 @@ function itemHTML(r){
       </div>
       ${statusBadge(r.status)}
     </div>
+    ${stepTracker(r)}
     <div class="detail"><div class="detail-inner">
-      ${stepTracker(r)}
       ${CORR().columns.filter(c=>!c.role || c.role==="status").map(c=>detailRow(r,c)).filter(Boolean).join("")}
       <button class="share-btn" data-act="copy-summary" data-id="${r.id}">${L("shareLabel")}</button>
     </div></div>
@@ -919,6 +911,28 @@ function renderDash(){
   const apClients=Object.entries(apC).map(([n,o])=>({name:n,rate:o.t?Math.round(o.a/o.t*100):0,a:o.a,t:o.t})).sort((x,y)=>y.rate-x.rate||y.t-x.t);
 
   let h='';
+
+  const statusCounts={};
+  CORR().statuses.forEach(s=>{ statusCounts[s.v]=rows.filter(r=>r.status===s.v).length; });
+  const funnelStatuses=CORR().statuses.filter(s=>s.tone!=="rose");
+  const failStatuses=CORR().statuses.filter(s=>s.tone==="rose");
+
+  h+=`<div style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em;padding:4px 2px 10px">${L("dashFunnelSection")}</div>`;
+  h+=`<div class="funnel-summary">`;
+  h+=`<div class="funnel-stat"><div class="funnel-stat-val">${rows.length}</div><div class="funnel-stat-lbl">${L("dashFunnelTotal")}</div></div>`;
+  h+=`<div class="funnel-stat"><div class="funnel-stat-val" style="color:var(--s-live-t)">${apprAll}</div><div class="funnel-stat-lbl">${success.join("/")}</div></div>`;
+  h+=`<div class="funnel-stat"><div class="funnel-stat-val" style="color:var(--s-live-t)">${rateAll}%</div><div class="funnel-stat-lbl">${L("dashFunnelRate")}</div></div>`;
+  h+=`</div>`;
+
+  const totalRows=rows.length||1;
+  h+=`<div class="dash-card">`;
+  CORR().statuses.forEach((s,i)=>{
+    const n=statusCounts[s.v]||0, t=TONES[s.tone], pct=Math.round(n/totalRows*100);
+    const isFail=s.tone==="rose";
+    if(isFail&&i>0) h+=`<div style="border-top:1px solid var(--border);margin:8px 0"></div>`;
+    h+=`<div class="dash-bar-row"><span class="dash-bar-label" style="color:var(${t.t})">${esc(s.v)}</span><div class="dash-bar-track"><div class="dash-bar-fill" style="width:${pct}%;background:var(${t.d})"></div></div><span class="dash-bar-val"${isFail?` style="color:var(${t.t})"`:``}>${n}<span style="color:var(--muted);font-weight:500;margin-left:4px">${pct}%</span></span></div>`;
+  });
+  h+=`</div>`;
 
   h+=`<div style="font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em;padding:4px 2px 10px">${L("dashWeeklySection")}</div>`;
 
