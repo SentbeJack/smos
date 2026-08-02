@@ -152,6 +152,17 @@ Sales 폰/PC
 
 ## 배포 기록 (Changelog)
 
+### v6.0 — 2026-08-02
+- **P1: 머천트 카드 step tracker 항상 노출**
+  - step tracker를 detail 내부 → item-row 아래로 이동 (접힌 상태에서도 보임)
+  - stepTag() 함수·CSS 제거 (중복)
+- **P2: 대시보드 퍼널 통계**
+  - Summary 카드 3개 (Total / Succeeded / 완료율)
+  - 상태별 가로 바 차트 (전체 대비 비율 %)
+  - Failed/Rejected 구분선 분리
+- KR/EN 다국어 키 추가 (dashFunnelSection, dashFunnelTotal, dashFunnelRate)
+- SPEC.md 기획안 추가
+
 ### v5.1 — 2026-07-31
 - Slack 알림을 onEdit → 1분 폴링 방식으로 전환
   - IMPORTRANGE 데이터는 onEdit 트리거가 발동하지 않는 문제 해결
