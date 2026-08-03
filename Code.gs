@@ -734,7 +734,7 @@ function pollStatusChanges() {
       if (!name && !mid) continue;
       if (!status) continue;
 
-      var rowKey = tab + "-" + (r + 1);
+      var rowKey = tab + ":" + (mid || name || r);
       var prevStatus = statusSnap[rowKey] || "";
 
       if (status === prevStatus) continue;
@@ -882,15 +882,21 @@ function initStatusSnapshot() {
     if (!sh) return;
     var vals = sh.getDataRange().getValues();
     var headers = vals[0].map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
-    var statusCol = -1;
+    var statusCol = -1, midCol = -1, nameCol = -1;
     for (var i = 0; i < headers.length; i++) {
-      if (headers[i].indexOf("onboarding status") >= 0) { statusCol = i; break; }
+      if (headers[i].indexOf("onboarding status") >= 0) statusCol = i;
+      if (headers[i] === "merchant id") midCol = i;
+      if (headers[i] === "sub merchant name" || headers[i] === "merchant entity name") nameCol = i;
     }
     if (statusCol < 0) { Logger.log(key + ": 'onboarding status' column NOT FOUND"); return; }
     Logger.log(key + ": status column found at index " + statusCol);
     for (var r = 1; r < vals.length; r++) {
       var s = String(vals[r][statusCol]).trim();
-      if (s) snap[key + "-" + (r + 1)] = s;
+      if (!s) continue;
+      var mid = midCol >= 0 ? String(vals[r][midCol]).trim() : "";
+      var name = nameCol >= 0 ? String(vals[r][nameCol]).trim() : "";
+      var rowKey = key + ":" + (mid || name || r);
+      snap[rowKey] = s;
     }
   });
   PropertiesService.getScriptProperties().setProperty("slack_status_snap", JSON.stringify(snap));

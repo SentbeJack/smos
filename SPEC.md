@@ -152,6 +152,10 @@ Sales 폰/PC
 
 ## 배포 기록 (Changelog)
 
+### v6.3 — 2026-08-03
+- **Slack 스냅샷 키 안정화** — 행 번호 기반(`VND-145`) → MID 기반(`VND:VN0145`) 키로 변경, 행 삽입/삭제 시 알림 누락 방지
+- BACKEND_URL 업데이트
+
 ### v6.2 — 2026-08-03
 - **Slack 알림에 FI Merchant 표시** — 상태 변경 알림에 Client/FI Merchant 정보 추가
 - Slack 메시지 생성 로직 config 기반으로 정리 (5개 타입 중복 제거)
