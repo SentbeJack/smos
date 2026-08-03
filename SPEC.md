@@ -152,6 +152,11 @@ Sales 폰/PC
 
 ## 배포 기록 (Changelog)
 
+### v6.2 — 2026-08-03
+- **Slack 알림에 FI Merchant 표시** — 상태 변경 알림에 Client/FI Merchant 정보 추가
+- Slack 메시지 생성 로직 config 기반으로 정리 (5개 타입 중복 제거)
+- BACKEND_URL 업데이트
+
 ### v6.1 — 2026-08-02
 - **보안: JWT fallback 제거** — tokeninfo API 실패 시 서명 미검증 fallback을 제거하고 인증 거부로 변경
 - BACKEND_URL 업데이트

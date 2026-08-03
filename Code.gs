@@ -715,25 +715,21 @@ function pollStatusChanges() {
     if (vals.length < 2) return;
     var headers = vals[0].map(function(h) { return String(h).toLowerCase().replace(/[-\s]+/g, " ").trim(); });
 
-    var statusCol = -1, nameCol = -1, midCol = -1;
+    var statusCol = -1, nameCol = -1, midCol = -1, clientCol = -1, failReasonCol = -1;
     for (var i = 0; i < headers.length; i++) {
       if (headers[i].indexOf("onboarding status") >= 0) statusCol = i;
       if (headers[i] === "merchant id") midCol = i;
       if (headers[i] === "sub merchant name" || headers[i] === "merchant entity name") nameCol = i;
+      if (headers[i] === "client" || headers[i] === "fi merchant") clientCol = i;
+      if (headers[i].indexOf("failed reason") >= 0) failReasonCol = i;
     }
     if (statusCol < 0) { Logger.log(tab + ": status column not found"); return; }
-
-    var failReasonCol = -1;
-    if (tab === "KRW") {
-      for (var j = 0; j < headers.length; j++) {
-        if (headers[j].indexOf("failed reason") >= 0) { failReasonCol = j; break; }
-      }
-    }
 
     for (var r = 1; r < vals.length; r++) {
       var row = vals[r];
       var name = nameCol >= 0 ? String(row[nameCol]).trim() : "";
       var mid = midCol >= 0 ? String(row[midCol]).trim() : "";
+      var client = clientCol >= 0 ? String(row[clientCol]).trim() : "";
       var status = String(row[statusCol]).trim();
       if (!name && !mid) continue;
       if (!status) continue;
@@ -744,20 +740,28 @@ function pollStatusChanges() {
       if (status === prevStatus) continue;
       statusSnap[rowKey] = status;
 
+      var base = { tab: tab, name: name || "—", mid: mid || "—", client: client, status: status };
+
       if (!prevStatus) {
-        alerts.push({ type: "new", tab: tab, name: name || "—", mid: mid || "—", status: status });
+        base.type = "new";
+        alerts.push(base);
         continue;
       }
 
+      base.prev = prevStatus;
       if (cs.failed.indexOf(status) >= 0) {
-        var reason = failReasonCol >= 0 ? String(row[failReasonCol]).trim() : "";
-        alerts.push({ type: "failed", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus, reason: reason });
+        base.type = "failed";
+        base.reason = failReasonCol >= 0 ? String(row[failReasonCol]).trim() : "";
+        alerts.push(base);
       } else if (cs.withdrawn.indexOf(status) >= 0) {
-        alerts.push({ type: "withdrawn", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
+        base.type = "withdrawn";
+        alerts.push(base);
       } else if (cs.success.indexOf(status) >= 0) {
-        alerts.push({ type: "approved", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
+        base.type = "approved";
+        alerts.push(base);
       } else if (cs.progress.indexOf(status) >= 0) {
-        alerts.push({ type: "progress", tab: tab, name: name || "—", mid: mid || "—", status: status, prev: prevStatus });
+        base.type = "progress";
+        alerts.push(base);
       }
     }
   });
@@ -767,45 +771,27 @@ function pollStatusChanges() {
   if (!alerts.length) return;
 
   alerts.forEach(function(a) {
-    var blocks;
-    if (a.type === "failed") {
-      blocks = [
-        { type: "header", text: { type: "plain_text", text: ":rotating_light: Onboarding Failed" } },
-        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:x: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") + (a.reason ? "\nReason: " + a.reason : "") } },
-        { type: "divider" },
-        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-      ];
-    } else if (a.type === "withdrawn") {
-      blocks = [
-        { type: "header", text: { type: "plain_text", text: ":warning: Onboarding Withdrawn" } },
-        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:no_entry_sign: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") } },
-        { type: "divider" },
-        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-      ];
-    } else if (a.type === "approved") {
-      blocks = [
-        { type: "header", text: { type: "plain_text", text: ":tada: Onboarding " + (a.tab === "KRW" ? "Succeeded" : "Approved") } },
-        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:white_check_mark: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") } },
-        { type: "divider" },
-        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-      ];
-    } else if (a.type === "progress") {
-      blocks = [
-        { type: "header", text: { type: "plain_text", text: ":arrow_forward: Status Update" } },
-        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`\n:arrows_counterclockwise: *" + a.status + "*" + (a.prev ? " (was: " + a.prev + ")" : "") } },
-        { type: "divider" },
-        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-      ];
-    } else {
-      blocks = [
-        { type: "header", text: { type: "plain_text", text: ":new: New Onboarding Request" } },
-        { type: "section", text: { type: "mrkdwn", text: "*[" + a.tab + "]* " + a.name + "\n`MID: " + a.mid + "`" + (a.status ? "\nStatus: " + a.status : "") } },
-        { type: "divider" },
-        { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
-      ];
-    }
+    var clientLine = a.client ? "FI Merchant: *" + a.client + "*\n" : "";
+    var merchantLine = a.name + "  `" + a.mid + "`";
+    var cfg = {
+      failed:    { icon: ":rotating_light:", title: "Onboarding Failed",    mark: ":x:" },
+      withdrawn: { icon: ":warning:",        title: "Onboarding Withdrawn", mark: ":no_entry_sign:" },
+      approved:  { icon: ":tada:",           title: "Onboarding " + (a.tab === "KRW" ? "Succeeded" : "Approved"), mark: ":white_check_mark:" },
+      progress:  { icon: ":arrow_forward:",  title: "Status Update",        mark: ":arrows_counterclockwise:" },
+      "new":     { icon: ":new:",            title: "New Onboarding Request", mark: ":pushpin:" }
+    };
+    var c = cfg[a.type] || cfg["new"];
+    var body = clientLine + merchantLine + "\n" + c.mark + " *" + a.status + "*";
+    if (a.prev) body += " (was: " + a.prev + ")";
+    if (a.reason) body += "\nReason: " + a.reason;
+    var blocks = [
+      { type: "header", text: { type: "plain_text", text: c.icon + " [" + a.tab + "] " + c.title } },
+      { type: "section", text: { type: "mrkdwn", text: body } },
+      { type: "divider" },
+      { type: "context", elements: [{ type: "mrkdwn", text: ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+    ];
     sendSlack_({ blocks: blocks });
-    Logger.log("Slack: " + a.type + " — " + a.tab + " " + a.name);
+    Logger.log("Slack: " + a.type + " — " + a.tab + " " + (a.client || "") + " " + a.name);
   });
 }
 
