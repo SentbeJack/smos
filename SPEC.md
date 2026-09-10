@@ -158,6 +158,9 @@ Sales 폰/PC
   상태·티켓을 바로 보여준다. sticky 헤더 높이만큼 offset을 줘 이름이 가려지지 않게 함
 - 추이 주석의 최대 머천트를 정규화 키(`CLOUDWAVEHONGKONGLIMITED`) 대신 실제 이름·MID로 표시
 - KR 조사 오류 수정 — 값이 끼워지는 자리 뒤의 `은/는`은 고를 수 없어 문장 구조를 바꿈
+- **뷰 전환 토글은 KR에서도 영어** (`Merchants · Concentration · Trend`) — 같은 헤더의
+  `Status/Forecast`·`KRW/VND`가 이미 영어 단일 표기라 하나만 한글이면 오히려 어색하다.
+  카드 제목·표 헤더·KPI·주석은 그대로 번역된다
 
 ### v7.1 — 2026-09-10
 - **입금 분석 뷰 2종** — Status 화면에 `머천트 · 집중도 · 추이` 토글 추가
