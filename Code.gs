@@ -170,16 +170,19 @@ var MAP = {
 /* ---- 입금(deposit) 원천 탭 ----
  * KRW: [RAW] KRW data — 거래 단위 로그. 1행 헤더 / 2행 TRUE / 3행 헤더반복 → 데이터는 4행부터(idx 3).
  *      Merchant ID로 온보딩 탭과 조인.
- * VND: [RAW] VND data — 거래 단위 로그. Baokim(구 파트너)과 H-PAY(현 파트너)가 섞여 있고,
- *      수취계좌번호가 비어 있는 행이 H-PAY다(854건 $9,299,579 — 원천 Transaction Type
- *      "Receive payment"와 정확히 일치 검증됨). 머천트명이 'SB ' 접두사로 이중 기록되므로
- *      접두사를 떼고 이름으로 합산해야 실제 볼륨이 나온다. VA 번호는 체계가 달라 조인 불가.
+ * VND: [RAW] VND data — 거래 단위 로그. Baokim(구 파트너)과 H-PAY(현 파트너)가 섞여 있어
+ *      수취계좌번호의 자릿수로 가른다. H-PAY VA는 9631로 시작하는 19자리라 15자리 한계를
+ *      넘어 시트가 텍스트로 담고, Baokim은 9633/9634 계열 10~14자리 숫자다.
+ *      → 19자리 854건 $9,299,579 (원천 Transaction Type "Receive payment"와 센트까지 일치 검증).
+ *      주의: gviz/QUERY로 이 열을 읽으면 number 열로 추론되어 텍스트 셀이 null로 내려온다.
+ *      "계좌 공란"으로 보이는 건 그 착시이므로 공란 판정으로 가르면 전량 탈락한다.
+ *      머천트명이 'SB ' 접두사로 이중 기록되므로 접두사를 떼고 이름으로 합산해야 실제 볼륨이 나온다.
  */
 var DEPOSITS = {
   KRW: { tab: "[RAW] KRW data", skip: 3, keyCol: 4, amount: 6, date: 5, vaType: 15,
          excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid" },
   VND: { tab: "[RAW] VND data", skip: 1, keyCol: 4, amount: 11, date: 6, acctCol: 5,
-         blankAcctOnly: true, requireCol: 0, joinBy: "name" }
+         vaMinDigits: 15, requireCol: 0, joinBy: "name" }
 };
 
 function normName_(s) {
@@ -225,31 +228,39 @@ function readDeposits_(key) {
   var tz = Session.getScriptTimeZone();
   var out = {};
   var skipped = { n: 0, sum: 0 };   // 키(MID/머천트명)가 없어 귀속 불가한 거래
-  // 가드별 탈락 수. 집계가 0으로 나올 때 어느 가드가 먹었는지 debugDeposits()가 이걸 찍는다.
-  var diag = { rows: 0, noRequire: 0, excluded: 0, hasAcct: 0, noAmt: 0, noKey: 0, kept: 0, s: {} };
-  var sample = function(name, v) {
-    if (!diag.s[name]) diag.s[name] = "(" + (typeof v) + ") " + JSON.stringify(String(v)).slice(0, 40);
+  // 탈락 사유별 건수·금액. 원천 총액과 대조하면 조용히 사라진 돈이 없는지 확인된다.
+  var diag = { rows: 0, kept: 0, keptSum: 0, drop: {} };
+  var drop = function(why, amt, v) {
+    var d = diag.drop[why] || (diag.drop[why] = { n: 0, sum: 0, sample: "" });
+    d.n++;
+    d.sum += amt || 0;
+    if (!d.sample && v !== undefined) {
+      d.sample = "(" + (typeof v) + ") " + JSON.stringify(String(v)).slice(0, 34);
+    }
   };
 
   for (var r = cfg.skip; r < vals.length; r++) {
     var row = vals[r];
     diag.rows++;
-    // Product 등 필수 컬럼이 빈 행은 원천의 잘린 행이다. VND에 21행 있고, 계좌번호도 비어 있어
-    // 가드가 없으면 H-PAY로 오분류된다(+$305,512).
+    var amt = parseAmount_(row[cfg.amount]);
+    // Product 등 필수 컬럼이 빈 행은 원천의 잘린 행이다. VND에 21행 있고 계좌번호도 비어 있다.
     if (cfg.requireCol != null && blankCell_(row[cfg.requireCol])) {
-      diag.noRequire++; sample("require", row[cfg.requireCol]); continue;
+      drop("필수컬럼공란", amt, row[cfg.requireCol]); continue;
     }
     if (cfg.excludeVal != null && String(row[cfg.excludeCol]).trim() === cfg.excludeVal) {
-      diag.excluded++; continue;
+      drop("제외값(" + cfg.excludeVal + ")", amt); continue;
     }
-    if (cfg.blankAcctOnly && !blankCell_(row[cfg.acctCol])) {   // 구 파트너 제외
-      diag.hasAcct++; sample("acct", row[cfg.acctCol]); continue;
+    // 수취 VA 자릿수로 파트너를 가른다. 짧은 쪽(9633/9634 계열)이 구 파트너 Baokim.
+    if (cfg.vaMinDigits) {
+      var dg = String(row[cfg.acctCol]).replace(/\D/g, "");
+      if (!dg.length) { drop("계좌없음", amt, row[cfg.acctCol]); continue; }
+      if (dg.length < cfg.vaMinDigits) { drop("구파트너VA", amt, row[cfg.acctCol]); continue; }
     }
-    var amt = parseAmount_(row[cfg.amount]);
-    if (!amt) { diag.noAmt++; sample("amt", row[cfg.amount]); continue; }
+    if (!amt) { drop("금액0", 0, row[cfg.amount]); continue; }
     var k = cfg.joinBy === "mid" ? String(row[cfg.keyCol]).trim() : normName_(row[cfg.keyCol]);
-    if (!k) { diag.noKey++; skipped.n++; skipped.sum += amt; continue; }
+    if (!k) { drop("키없음", amt, row[cfg.keyCol]); skipped.n++; skipped.sum += amt; continue; }
     diag.kept++;
+    diag.keptSum += amt;
 
     var o = out[k];
     if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [] };
@@ -283,7 +294,7 @@ function attachDeposits_(key, rows) {
   return rows;
 }
 
-var VERSION = "2026-09-10-deposit-v2-diag";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-09-10-deposit-v3";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -1080,10 +1091,12 @@ function debugDeposits() {
     Logger.log("  머천트 " + keys.length + "곳 · 거래 " + cnt + "건 · 합계 " + total.toFixed(2));
     if (dep._diag) {
       var g = dep._diag;
-      Logger.log("  가드 탈락: 읽은행 " + g.rows + " → 필수컬럼공란 " + g.noRequire +
-                 " / 제외값 " + g.excluded + " / 계좌있음(구파트너) " + g.hasAcct +
-                 " / 금액0 " + g.noAmt + " / 키없음 " + g.noKey + " / 채택 " + g.kept);
-      Object.keys(g.s).forEach(function(n) { Logger.log("    탈락샘플 " + n + " = " + g.s[n]); });
+      Logger.log("  읽은행 " + g.rows + " → 채택 " + g.kept + "건 " + g.keptSum.toFixed(2));
+      Object.keys(g.drop).forEach(function(why) {
+        var d = g.drop[why];
+        Logger.log("    탈락 " + why + ": " + d.n + "건 " + d.sum.toFixed(2) +
+                   (d.sample ? "  샘플=" + d.sample : ""));
+      });
     }
     if (dep._skipped) {
       Logger.log("  ⚠ 키 없어 귀속 불가: " + dep._skipped.n + "건 · " +
