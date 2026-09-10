@@ -167,7 +167,99 @@ var MAP = {
   }
 };
 
-var VERSION = "2026-07-14-slack-v2";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+/* ---- 입금(deposit) 원천 탭 ----
+ * KRW: [RAW] KRW data — 거래 단위 로그. 1행 헤더 / 2행 TRUE / 3행 헤더반복 → 데이터는 4행부터(idx 3).
+ *      Merchant ID로 온보딩 탭과 조인.
+ * VND: [RAW] VND data — 거래 단위 로그. Baokim(구 파트너)과 H-PAY(현 파트너)가 섞여 있고,
+ *      수취계좌번호가 비어 있는 행이 H-PAY다(854건 $9,299,579 — 원천 Transaction Type
+ *      "Receive payment"와 정확히 일치 검증됨). 머천트명이 'SB ' 접두사로 이중 기록되므로
+ *      접두사를 떼고 이름으로 합산해야 실제 볼륨이 나온다. VA 번호는 체계가 달라 조인 불가.
+ */
+var DEPOSITS = {
+  KRW: { tab: "[RAW] KRW data", skip: 3, keyCol: 4, amount: 6, date: 5, vaType: 15,
+         excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid" },
+  VND: { tab: "[RAW] VND data", skip: 1, keyCol: 4, amount: 11, date: 6, acctCol: 5,
+         blankAcctOnly: true, joinBy: "name" }
+};
+
+function normName_(s) {
+  return String(s).toUpperCase().replace(/^SB\s+/, "").replace(/[^A-Z0-9]/g, "");
+}
+
+function parseAmount_(v) {
+  if (typeof v === "number") return v;
+  var n = parseFloat(String(v).replace(/,/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+function depDate_(v, tz) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz, "yyyy-MM-dd");
+  var s = String(v).trim();
+  if (!s) return "";
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);            // ISO
+  if (m) return m[1] + "-" + m[2] + "-" + m[3];
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);          // DD/MM/YYYY
+  if (m) return m[3] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[1]).slice(-2);
+  return "";
+}
+
+/* 머천트 키 → { sum, n, last, va } 집계. 5분 캐시. */
+function readDeposits_(key) {
+  var cfg = DEPOSITS[key];
+  if (!cfg) return {};
+  var cache = CacheService.getScriptCache();
+  var ck = "dep_" + key;
+  var hit = cache.get(ck);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+
+  var sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(cfg.tab);
+  if (!sh) { Logger.log("deposit tab not found: " + cfg.tab); return {}; }
+  var vals = sh.getDataRange().getValues();
+  var tz = Session.getScriptTimeZone();
+  var out = {};
+  var skipped = { n: 0, sum: 0 };   // 키(MID/머천트명)가 없어 귀속 불가한 거래
+
+  for (var r = cfg.skip; r < vals.length; r++) {
+    var row = vals[r];
+    if (cfg.excludeVal != null && String(row[cfg.excludeCol]).trim() === cfg.excludeVal) continue;
+    if (cfg.blankAcctOnly && String(row[cfg.acctCol]).trim()) continue;   // 구 파트너 제외
+    var amt = parseAmount_(row[cfg.amount]);
+    if (!amt) continue;
+    var k = cfg.joinBy === "mid" ? String(row[cfg.keyCol]).trim() : normName_(row[cfg.keyCol]);
+    if (!k) { skipped.n++; skipped.sum += amt; continue; }
+
+    var o = out[k];
+    if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [] };
+    o.sum += amt;
+    o.n++;
+    var d = depDate_(row[cfg.date], tz);
+    if (d && d > o.last) o.last = d;
+    if (cfg.vaType != null) {
+      var vt = String(row[cfg.vaType]).trim();
+      if (vt && o.va.indexOf(vt) < 0) o.va.push(vt);
+    }
+  }
+  if (skipped.n) out._skipped = skipped;
+  try { cache.put(ck, JSON.stringify(out), 300); } catch (e) { /* 6MB 초과 시 캐시 생략 */ }
+  return out;
+}
+
+/* readTab 결과에 입금 필드를 붙인다. "_" 로 시작하는 키는 머천트가 아닌 메타 항목 */
+function attachDeposits_(key, rows) {
+  var dep = readDeposits_(key);
+  var byMid = DEPOSITS[key] && DEPOSITS[key].joinBy === "mid";
+  rows.forEach(function(r) {
+    var k = byMid ? String(r.merchantId || "").trim() : normName_(r.name || "");
+    var d = k ? dep[k] : null;
+    r.depSum = d ? Math.round(d.sum * 100) / 100 : 0;
+    r.depCnt = d ? d.n : 0;
+    r.depLast = d ? d.last : "";
+    if (d && d.va && d.va.length) r.depVaType = d.va.join(" / ");
+  });
+  return rows;
+}
+
+var VERSION = "2026-09-10-deposit-v1";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -323,7 +415,10 @@ function doGet(e) {
     return jsonOut_(data);
   }
 
-  var data = { KRW: readTab(MAP.KRW, {}), VND: readTab(MAP.VND, {}) };
+  var data = {
+    KRW: attachDeposits_("KRW", readTab(MAP.KRW, {})),
+    VND: attachDeposits_("VND", readTab(MAP.VND, {}))
+  };
   data._version = VERSION;
   data._user = userInfo;
   return jsonOut_(data);
@@ -903,6 +998,23 @@ function initStatusSnapshot() {
   Logger.log("Status snapshot initialized: " + Object.keys(snap).length + " rows marked as seen");
 }
 
+/* ---- 특정 MID를 스냅샷에서 제거 (1회 실행 → 다음 poll에서 "new"로 감지) ---- */
+function resetEntries() {
+  var props = PropertiesService.getScriptProperties();
+  var snap = JSON.parse(props.getProperty("slack_status_snap") || "{}");
+  var targets = ["VND:VN0147", "VND:VN0148"];
+  targets.forEach(function(key) {
+    if (snap[key]) {
+      Logger.log("Removed: " + key + " (was: " + snap[key] + ")");
+      delete snap[key];
+    } else {
+      Logger.log("Not found in snapshot: " + key);
+    }
+  });
+  props.setProperty("slack_status_snap", JSON.stringify(snap));
+  Logger.log("Done — next poll will detect these as new");
+}
+
 /* ---- 테스트: Slack 웹훅 동작 확인 ---- */
 function testSlackAlert() {
   var payload = {
@@ -915,6 +1027,49 @@ function testSlackAlert() {
   };
   var ok = sendSlack_(payload);
   Logger.log("testSlackAlert result: " + ok);
+}
+
+/* ---- 입금 집계 진단 ---- */
+function debugDeposits() {
+  ["KRW", "VND"].forEach(function(key) {
+    var cfg = DEPOSITS[key];
+    var sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(cfg.tab);
+    Logger.log("===== " + key + " (" + cfg.tab + ") =====");
+    if (!sh) { Logger.log("  탭 없음"); return; }
+    Logger.log("  시트 행수: " + sh.getLastRow() + " / 열수: " + sh.getLastColumn());
+
+    CacheService.getScriptCache().remove("dep_" + key);   // 캐시 무시하고 새로 집계
+    var dep = readDeposits_(key);
+    var keys = Object.keys(dep).filter(function(k) { return k.charAt(0) !== "_"; });
+    var total = 0, cnt = 0;
+    keys.forEach(function(k) { total += dep[k].sum; cnt += dep[k].n; });
+    Logger.log("  머천트 " + keys.length + "곳 · 거래 " + cnt + "건 · 합계 " + total.toFixed(2));
+    if (dep._skipped) {
+      Logger.log("  ⚠ 키 없어 귀속 불가: " + dep._skipped.n + "건 · " +
+                 dep._skipped.sum.toFixed(2) + " (원천에 MID/머천트명이 비어 있음)");
+    }
+
+    var rows = attachDeposits_(key, readTab(MAP[key], {}));
+    var matched = rows.filter(function(r) { return r.depSum > 0; });
+    var noDep = rows.filter(function(r) { return !r.depSum; });
+    Logger.log("  보드 " + rows.length + "행 → 입금 매칭 " + matched.length + " / 미입금 " + noDep.length);
+    Logger.log("  매칭 합계 " + matched.reduce(function(a, r) { return a + r.depSum; }, 0).toFixed(2));
+
+    var joinOf = function(r) {
+      return DEPOSITS[key].joinBy === "mid" ? String(r.merchantId || "").trim() : normName_(r.name || "");
+    };
+    var boardKeys = {};
+    rows.forEach(function(r) { boardKeys[joinOf(r)] = 1; });
+    var orphan = keys.filter(function(k) { return !boardKeys[k]; });
+    if (orphan.length) {
+      Logger.log("  ⚠ 보드에 없는 입금 머천트 " + orphan.length + "곳: " + orphan.slice(0, 10).join(", "));
+      Logger.log("    누락 금액: " + orphan.reduce(function(a, k) { return a + dep[k].sum; }, 0).toFixed(2));
+    }
+    matched.sort(function(a, b) { return b.depSum - a.depSum; }).slice(0, 5).forEach(function(r) {
+      Logger.log("    " + (r.merchantId || "-") + " " + String(r.name).slice(0, 30) +
+                 " → " + r.depSum + " (" + r.depCnt + "건, ~" + r.depLast + ")");
+    });
+  });
 }
 
 /* ---- 전체 진단 ---- */

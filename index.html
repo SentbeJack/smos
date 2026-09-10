@@ -127,6 +127,22 @@
   .badge{flex:none; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:650; padding:4px 9px; border-radius:999px; letter-spacing:-.01em; white-space:nowrap;}
   .badge .bd{width:6px; height:6px; border-radius:50%;}
 
+  /* ---- 입금(deposit) ---- */
+  .item-right{flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
+  .dep-badge{display:flex; flex-direction:column; align-items:flex-end; line-height:1.25;}
+  .dep-amt{font-family:var(--mono); font-size:14px; font-weight:700; letter-spacing:-.015em; white-space:nowrap;}
+  .dep-meta{font-family:var(--mono); font-size:10px; color:var(--muted); white-space:nowrap;}
+  .dep-badge.none .dep-amt{font-size:11.5px; font-weight:650; color:var(--s-vaw-t);}
+  .item.no-dep .item-row{border-left:3px solid var(--s-vaw-d); margin-left:-3px;}
+  .dep-sum{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink-2);}
+  .dep-warn{font-size:12px; font-weight:650; color:var(--s-vaw-t); background:var(--s-vaw-b); padding:2px 7px; border-radius:4px;}
+  .chip.chip-dep.on{background:var(--s-vaw-d); border-color:var(--s-vaw-d); color:#fff;}
+  .chip.chip-dep.on .cnt{color:rgba(255,255,255,.85);}
+  .act-pill{flex:none; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+    color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:6px 11px; border-radius:999px; white-space:nowrap;}
+  .act-pill b{font-family:var(--mono); font-size:11.5px; color:var(--ink-2);}
+  .act-pill i{font-family:var(--mono); font-style:normal; font-size:11px; font-weight:700; color:var(--s-live-d);}
+
   .detail{max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.3,.7,.3,1);}
   .item.open .detail{max-height:1400px;}
   .detail-inner{padding:2px 10px 15px; display:flex; flex-direction:column; gap:9px;}
@@ -428,7 +444,15 @@ const STRINGS = {
     vaCopied:"VA 번호가 복사됐어요",
     sortRecent:"↕ 최근순",
     sortGroup:"↕ 그룹순",
+    sortDeposit:"↕ 입금순",
     attention:"주의 필요",
+    noDeposit:"미입금",
+    depTotal:"총 입금액",
+    depCount:"입금 건수",
+    depLast:"최근 입금일",
+    depVaType:"VA 유형",
+    depNone:"입금 없음",
+    activation:"입금 전환",
     shareLabel:"📋 공유용 복사",
     summaryCopied:"현황 요약이 복사됐어요",
     vaIssued:"VA 발급",
@@ -496,7 +520,15 @@ const STRINGS = {
     vaCopied:"VA number copied",
     sortRecent:"↕ Recent",
     sortGroup:"↕ By group",
+    sortDeposit:"↕ By deposit",
     attention:"Attention",
+    noDeposit:"No deposit",
+    depTotal:"Total deposits",
+    depCount:"Deposit count",
+    depLast:"Last deposit",
+    depVaType:"VA type",
+    depNone:"No deposit",
+    activation:"Activation",
     shareLabel:"📋 Copy summary",
     summaryCopied:"Summary copied",
     vaIssued:"VA issued",
@@ -554,6 +586,7 @@ const CORRIDORS = {
       {key:"result", label:"심사", labelEn:"Review"},
       {key:"va", label:"VA 발급", labelEn:"VA Issued"},
     ],
+    currency:"KRW",
   },
   VND:{
     label:"VND",
@@ -582,6 +615,8 @@ const CORRIDORS = {
       {key:"result", label:"심사", labelEn:"Review"},
       {key:"va", label:"VA 발급", labelEn:"VA Issued"},
     ],
+    /* [RAW] VND data의 H-PAY 거래(수취계좌 공란)를 머천트명으로 합산한 USD */
+    currency:"USD",
   },
 };
 
@@ -625,6 +660,29 @@ const groupField=()=>colOf("group").field;
 const nameField =()=>colOf("name").field;
 const colLabel = c => lang==="EN" ? (c.labelEn||c.label) : c.label;
 function statusMeta(v){ const s=CORR().statuses.find(x=>x.v===v); const tone=TONES[s?s.tone:"slate"]; return {label:v||"—", ...tone}; }
+
+/* 입금액 표기 — 코리도별 통화. 절대 합산하지 않는다(KRW vs USD) */
+function fmtMoney(v,cur){
+  cur = cur || CORR().currency;
+  const n = Number(v)||0;
+  if(!n) return "";
+  if(cur==="KRW"){
+    if(n>=1e8) return "₩"+(n/1e8).toFixed(1)+"억";
+    if(n>=1e4) return "₩"+Math.round(n/1e4).toLocaleString()+"만";
+    return "₩"+Math.round(n).toLocaleString();
+  }
+  if(n>=1e6) return "$"+(n/1e6).toFixed(2)+"M";
+  if(n>=1e3) return "$"+(n/1e3).toFixed(1)+"K";
+  return "$"+n.toFixed(0);
+}
+function fmtMoneyFull(v,cur){
+  cur = cur || CORR().currency;
+  const n = Number(v)||0;
+  return cur==="KRW" ? "₩"+Math.round(n).toLocaleString()
+                     : "$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+/* 승인 완료인데 입금이 0인 건 — Sales 후속 대상 */
+const isNoDeposit = r => CORR().success.includes(r.status) && !(Number(r.depSum)||0);
 
 function stepOf(r){
   const c=CORR(); if(!c.steps) return null;
@@ -673,7 +731,10 @@ function buildSummary(r){
   }
   const rc=CORR().columns.find(c=>c.type==="reason");
   const reason=rc&&r[rc.field]?` · ${r[rc.field]}`:"";
-  return `${name}${mid} — ${status}${va}${reason}${stepStr}`;
+  const dep=Number(r.depSum)||0;
+  const depStr=dep?` · ${L("depTotal")} ${fmtMoney(dep)}${r.depCnt?`(${r.depCnt})`:""}`
+                  :isNoDeposit(r)?` · ${L("noDeposit")}`:"";
+  return `${name}${mid} — ${status}${va}${reason}${stepStr}${depStr}`;
 }
 function clipCopy(text,msg){ navigator.clipboard.writeText(text).then(()=>toast(msg)).catch(()=>{const t=document.createElement("textarea");t.value=text;t.style.position="fixed";t.style.opacity="0";document.body.appendChild(t);t.select();document.execCommand("copy");document.body.removeChild(t);toast(msg);}); }
 
@@ -692,8 +753,9 @@ const openItems = new Set();
 function statusBadge(v){ const s=statusMeta(v); return `<span class="badge" style="color:var(${s.t});background:var(${s.b})"><span class="bd" style="background:var(${s.d})"></span>${esc(s.label)}</span>`; }
 
 function matchRow(r){
-  if(filter==="attention") return !!isAttention(r);
-  if(filter!=="all" && r.status!==filter) return false;
+  if(filter==="attention"){ if(!isAttention(r)) return false; }
+  else if(filter==="nodeposit"){ if(!isNoDeposit(r)) return false; }
+  else if(filter!=="all" && r.status!==filter) return false;
   const q=query.toLowerCase(); if(!q) return true;
   return [nameField(),groupField(),"merchantId"].some(f=>String(r[f]||"").toLowerCase().includes(q));
 }
@@ -702,8 +764,8 @@ function render(){
   $("#titleText").textContent = "Sub Merchant Onboarding Status";
   $("#search").placeholder = L("search");
   const sortBtn=$("#btnSort");
-  sortBtn.textContent = sortMode==="recent"?L("sortRecent"):L("sortGroup");
-  sortBtn.classList.toggle("sort-on", sortMode==="recent");
+  sortBtn.textContent = sortMode==="recent"?L("sortRecent"):sortMode==="deposit"?L("sortDeposit"):L("sortGroup");
+  sortBtn.classList.toggle("sort-on", sortMode!=="group");
   $("#btnExportCsv").textContent = L("btnExportCsv");
   $("#btnExportJson").textContent = L("btnExportJson");
   $("#btnWeeklyReport").textContent = "📧 "+L("weeklyReport");
@@ -732,6 +794,10 @@ function render(){
       const mb=groups[b].reduce((mx,r)=>r.requestDate>mx?r.requestDate:mx,"");
       return mb.localeCompare(ma);
     });
+  } else if(sortMode==="deposit"){
+    const dsum=g=>groups[g].reduce((a,r)=>a+(Number(r.depSum)||0),0);
+    for(const g of names) groups[g].sort((a,b)=>(Number(b.depSum)||0)-(Number(a.depSum)||0));
+    names.sort((a,b)=>dsum(b)-dsum(a));
   }
 
   let html="";
@@ -745,12 +811,14 @@ function render(){
       const succ=gr.filter(r=>CORR().success.includes(r.status)).length;
       const pct=Math.round(succ/gr.length*100);
       const attnCnt=gr.filter(r=>isAttention(r)).length;
+      const gDep=gr.reduce((a,r)=>a+(Number(r.depSum)||0),0);
       const isOpen = forceOpen || openGroups.has(active+"|"+g);
       html+=`<div class="group ${isOpen?'open':''}" data-g="${esc(g)}">
         <div class="group-head" data-act="tg-group">
           <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="group-name">${esc(g)}</span>
           <div class="group-meta">
+            ${gDep?`<span class="dep-sum">${fmtMoney(gDep)}</span>`:""}
             ${attnCnt?`<span class="attn-cnt">⚠ ${attnCnt}</span>`:""}
             <div class="ratio"><span class="ratio-txt">${succ}/${gr.length}</span><div class="ratio-bar"><i style="width:${pct}%"></i></div></div>
           </div>
@@ -772,7 +840,13 @@ function itemHTML(r){
   const mid=r.merchantId;
   const attn=isAttention(r);
   const attnCls=attn==="high"?"attn-high":"";
-  return `<div class="item ${isOpen?'open':''} ${attnCls}" data-id="${r.id}">
+  const dep=Number(r.depSum)||0;
+  const noDep=isNoDeposit(r);
+  const depBadge = dep
+    ? `<div class="dep-badge"><span class="dep-amt">${fmtMoney(dep)}</span>${
+         r.depCnt?`<span class="dep-meta">${r.depCnt}${lang==="EN"?"":"건"}${r.depLast?" · "+r.depLast.slice(5).replace("-","/"):""}</span>`:""}</div>`
+    : noDep ? `<div class="dep-badge none"><span class="dep-amt">${L("noDeposit")}</span></div>` : "";
+  return `<div class="item ${isOpen?'open':''} ${attnCls} ${noDep?'no-dep':''}" data-id="${r.id}">
     <div class="item-row" data-act="tg-item">
       <div class="item-main">
         <div class="item-name">${esc(r[nameField()])||`<span style="color:var(--muted)">${L("noName")}</span>`}</div>
@@ -784,14 +858,33 @@ function itemHTML(r){
           ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>{const u=r[c.field],href=/^https?:\/\//i.test(u)?u:"https://"+u; return `<a class="url-chip" href="${esc(href)}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`;}).join("")}
         </div>
       </div>
-      ${statusBadge(r.status)}
+      <div class="item-right">${depBadge}${statusBadge(r.status)}</div>
     </div>
     ${stepTracker(r)}
     <div class="detail"><div class="detail-inner">
+      ${depDetail(r)}
       ${CORR().columns.filter(c=>!c.role || c.role==="status").map(c=>detailRow(r,c)).filter(Boolean).join("")}
       <button class="share-btn" data-act="copy-summary" data-id="${r.id}">${L("shareLabel")}</button>
     </div></div>
   </div>`;
+}
+
+function depDetail(r){
+  const dep=Number(r.depSum)||0;
+  if(!dep){
+    if(!isNoDeposit(r)) return "";
+    return `<div class="d-item"><span class="d-key">${L("depTotal")}</span>
+      <span class="d-val"><span class="dep-warn">${L("depNone")}</span></span></div>`;
+  }
+  let h=`<div class="d-item"><span class="d-key">${L("depTotal")}</span>
+    <span class="d-val mono">${fmtMoneyFull(dep)}</span></div>`;
+  if(r.depCnt) h+=`<div class="d-item"><span class="d-key">${L("depCount")}</span>
+    <span class="d-val mono">${r.depCnt}${lang==="EN"?"":"건"}</span></div>`;
+  if(r.depLast) h+=`<div class="d-item"><span class="d-key">${L("depLast")}</span>
+    <span class="d-val mono">${esc(r.depLast)}</span></div>`;
+  if(r.depVaType) h+=`<div class="d-item"><span class="d-key">${L("depVaType")}</span>
+    <span class="d-val">${esc(r.depVaType)}</span></div>`;
+  return h;
 }
 
 function detailRow(r,c){
@@ -818,8 +911,12 @@ function renderTabs(){
 function renderChips(){
   const rows=Store.rows();
   const attnTotal=rows.filter(r=>isAttention(r)).length;
+  const noDepTotal=rows.filter(r=>isNoDeposit(r)).length;
+  const apprTotal=rows.filter(r=>CORR().success.includes(r.status)).length;
   let html=`<button class="chip ${filter==='all'?'on':''}" data-filter="all">${L("all")} <span class="cnt">${rows.length}</span></button>`;
   if(attnTotal) html+=`<button class="chip ${filter==='attention'?'on':''}" data-filter="attention"><span class="dot" style="background:var(--s-vaw-d)"></span>${L("attention")} <span class="cnt">${attnTotal}</span></button>`;
+  if(noDepTotal) html+=`<button class="chip chip-dep ${filter==='nodeposit'?'on':''}" data-filter="nodeposit"><span class="dot" style="background:var(--s-vaw-d)"></span>${L("noDeposit")} <span class="cnt">${noDepTotal}</span></button>`;
+  if(apprTotal) html+=`<span class="act-pill" title="${L("activation")}">${L("activation")} <b>${apprTotal-noDepTotal}/${apprTotal}</b> <i>${Math.round((apprTotal-noDepTotal)/apprTotal*100)}%</i></span>`;
   CORR().statuses.forEach(s=>{
     const n=rows.filter(r=>r.status===s.v).length;
     if(n===0 && filter!==s.v) return;
@@ -834,7 +931,10 @@ $("#langToggle").addEventListener("click",e=>{ const b=e.target.closest("button"
 $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; active=b.dataset.tab; filter="all"; query=""; $("#search").value=""; render(); if(dashMode) renderDash(); });
 $("#search").addEventListener("input",e=>{ query=e.target.value.trim(); render(); });
 $("#chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b)return; filter=b.dataset.filter; render(); });
-$("#btnSort").addEventListener("click",()=>{ sortMode=sortMode==="group"?"recent":"group"; render(); });
+$("#btnSort").addEventListener("click",()=>{
+  sortMode = sortMode==="group" ? "recent" : sortMode==="recent" ? "deposit" : "group";
+  render();
+});
 
 $("#list").addEventListener("click",e=>{
   const el=e.target.closest("[data-act]"); if(!el)return;
@@ -1204,9 +1304,14 @@ $("#btnWeeklyReport").addEventListener("click", openWeeklyReport);
 /* ============================ Import / Export ============================ */
 function toCSV(){
   const cols=CORR().columns;
+  const cur=CORR().currency;
+  const dep=[{field:"depSum",header:"Deposit Amount ("+cur+")"},
+             {field:"depCnt",header:"Deposit Count"},
+             {field:"depLast",header:"Last Deposit"}];
+  const all=cols.concat(dep);
   const q=v=>{ v=String(v??""); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
-  const lines=[cols.map(c=>q(c.header)).join(",")];
-  Store.rows().forEach(r=>lines.push(cols.map(c=>q(r[c.field])).join(",")));
+  const lines=[all.map(c=>q(c.header)).join(",")];
+  Store.rows().forEach(r=>lines.push(all.map(c=>q(r[c.field])).join(",")));
   return lines.join("\r\n");
 }
 function download(name,content,type){ const b=new Blob([content],{type}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }
