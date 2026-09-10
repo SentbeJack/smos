@@ -180,9 +180,11 @@ var MAP = {
  */
 var DEPOSITS = {
   KRW: { tab: "[RAW] KRW data", skip: 3, keyCol: 4, amount: 6, date: 5, vaType: 15,
+         nameCol: 3, clientCol: 0,
          excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid" },
   VND: { tab: "[RAW] VND data", skip: 1, keyCol: 4, amount: 11, date: 6, acctCol: 5,
-         vaMinDigits: 15, requireCol: 0, joinBy: "name" }
+         nameCol: 4, clientCol: 1,
+         vaMinDigits: 15, altLabel: "Baokim", requireCol: 0, joinBy: "name" }
 };
 
 function normName_(s) {
@@ -228,6 +230,9 @@ function readDeposits_(key) {
   var tz = Session.getScriptTimeZone();
   var out = {};
   var skipped = { n: 0, sum: 0 };   // 키(MID/머천트명)가 없어 귀속 불가한 거래
+  // 월별 누적: cur=현 파트너, alt=구 파트너, una=머천트 귀속 불가. first=머천트별 최초 입금월.
+  // una를 따로 두는 이유: sum에 섞으면 머천트 점유율 합이 100%를 넘고, 버리면 추이에서 돈이 사라진다.
+  var cur = {}, alt = {}, una = {}, first = {};
   // 탈락 사유별 건수·금액. 원천 총액과 대조하면 조용히 사라진 돈이 없는지 확인된다.
   var diag = { rows: 0, kept: 0, keptSum: 0, drop: {} };
   var drop = function(why, amt, v) {
@@ -250,33 +255,107 @@ function readDeposits_(key) {
     if (cfg.excludeVal != null && String(row[cfg.excludeCol]).trim() === cfg.excludeVal) {
       drop("제외값(" + cfg.excludeVal + ")", amt); continue;
     }
+    var d = depDate_(row[cfg.date], tz);
+    var mo = d ? d.slice(0, 7) : "";
     // 수취 VA 자릿수로 파트너를 가른다. 짧은 쪽(9633/9634 계열)이 구 파트너 Baokim.
+    // 구 파트너 거래는 머천트 집계에서 빼지만 추이 비교용으로 월별 합계는 남긴다.
     if (cfg.vaMinDigits) {
       var dg = String(row[cfg.acctCol]).replace(/\D/g, "");
       if (!dg.length) { drop("계좌없음", amt, row[cfg.acctCol]); continue; }
-      if (dg.length < cfg.vaMinDigits) { drop("구파트너VA", amt, row[cfg.acctCol]); continue; }
+      if (dg.length < cfg.vaMinDigits) {
+        drop("구파트너VA", amt, row[cfg.acctCol]);
+        if (amt) bump_(alt, mo, normName_(row[cfg.keyCol]), amt);
+        continue;
+      }
     }
     if (!amt) { drop("금액0", 0, row[cfg.amount]); continue; }
     var k = cfg.joinBy === "mid" ? String(row[cfg.keyCol]).trim() : normName_(row[cfg.keyCol]);
-    if (!k) { drop("키없음", amt, row[cfg.keyCol]); skipped.n++; skipped.sum += amt; continue; }
+    if (!k) {
+      drop("키없음", amt, row[cfg.keyCol]);
+      skipped.n++; skipped.sum += amt;
+      bump_(una, mo, "", amt);
+      continue;
+    }
     diag.kept++;
     diag.keptSum += amt;
 
     var o = out[k];
-    if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [] };
+    if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [], name: "", client: "" };
     o.sum += amt;
     o.n++;
-    var d = depDate_(row[cfg.date], tz);
     if (d && d > o.last) o.last = d;
+    // 표시용 이름/클라이언트. 보드에 없는 머천트를 목록에 얹을 때 쓴다.
+    if (!o.name && cfg.nameCol != null) o.name = String(row[cfg.nameCol]).trim();
+    if (!o.client && cfg.clientCol != null) o.client = String(row[cfg.clientCol]).trim();
     if (cfg.vaType != null) {
       var vt = String(row[cfg.vaType]).trim();
       if (vt && o.va.indexOf(vt) < 0) o.va.push(vt);
     }
+    bump_(cur, mo, k, amt);
+    if (mo && (!first[k] || mo < first[k])) first[k] = mo;
   }
   if (skipped.n) out._skipped = skipped;
   out._diag = diag;
+  out._meta = depMeta_(cfg, out, cur, alt, una, first);
   try { cache.put(ck, JSON.stringify(out), 300); } catch (e) { /* 6MB 초과 시 캐시 생략 */ }
   return out;
+}
+
+/* 월 → { sum, n, keys{key:금액} } 누적. 추이·점유율 계산의 공통 적재 함수 */
+function bump_(box, mo, k, amt) {
+  if (!mo) { box._nodate = (box._nodate || 0) + amt; return; }
+  var m = box[mo] || (box[mo] = { sum: 0, n: 0, keys: {} });
+  m.sum += amt;
+  m.n++;
+  if (k) m.keys[k] = (m.keys[k] || 0) + amt;
+}
+
+/* 프론트에 내려줄 입금 메타. 월별 시계열 + 최대 머천트 기여분 + 구 파트너 계열. */
+function depMeta_(cfg, out, cur, alt, una, first) {
+  var r2 = function(v) { return Math.round(v * 100) / 100; };
+  // 최대 머천트를 찾아둔다. "대형 건 제외" 토글이 이 키를 뺀 값을 본다.
+  var top = "", topSum = 0, total = 0, txns = 0, merchants = 0;
+  Object.keys(out).forEach(function(k) {
+    if (k.charAt(0) === "_") return;
+    merchants++;
+    total += out[k].sum;
+    txns += out[k].n;
+    if (out[k].sum > topSum) { topSum = out[k].sum; top = k; }
+  });
+
+  var mos = {};
+  [cur, alt, una].forEach(function(box) {
+    Object.keys(box).forEach(function(m) { if (m.charAt(0) !== "_") mos[m] = 1; });
+  });
+
+  var months = Object.keys(mos).sort().map(function(mo) {
+    var c = cur[mo] || { sum: 0, n: 0, keys: {} };
+    var a = alt[mo] || { sum: 0, n: 0, keys: {} };
+    var u = una[mo] || { sum: 0, n: 0 };
+    var ks = Object.keys(c.keys);
+    return {
+      mo: mo,
+      sum: r2(c.sum), n: c.n, m: ks.length,
+      nw: ks.filter(function(k) { return first[k] === mo; }).length,
+      w: r2(c.keys[top] || 0),                       // 최대 머천트가 그 달에 만든 금액
+      a: r2(a.sum), an: a.n, am: Object.keys(a.keys).length,
+      u: r2(u.sum), un: u.n                          // 머천트 귀속 불가 (sum에 포함 안 됨)
+    };
+  });
+
+  var altTotal = 0, altTxns = 0;
+  Object.keys(alt).forEach(function(m) {
+    if (m.charAt(0) === "_") return;
+    altTotal += alt[m].sum; altTxns += alt[m].n;
+  });
+
+  return {
+    total: r2(total), txns: txns, merchants: merchants,
+    topKey: top, topSum: r2(topSum),
+    months: months,
+    alt: { label: cfg.altLabel || "", total: r2(altTotal), txns: altTxns },
+    unattributed: out._skipped ? { n: out._skipped.n, sum: r2(out._skipped.sum) } : null
+  };
 }
 
 /* readTab 결과에 입금 필드를 붙인다. "_" 로 시작하는 키는 머천트가 아닌 메타 항목 */
@@ -294,7 +373,39 @@ function attachDeposits_(key, rows) {
   return rows;
 }
 
-var VERSION = "2026-09-10-deposit-v3";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+/* 입금은 있는데 온보딩 탭에 행이 없는 머천트. 온보딩 탭이 2026-03부터라 그 전 건이 여기 걸린다.
+ * 보드에서 숨기면 총액과 목록이 어긋나므로 태그를 달아 목록에 얹는다. */
+function depBoardMeta_(key, rows) {
+  var cfg = DEPOSITS[key];
+  var dep = readDeposits_(key);
+  var meta = dep._meta || {};
+  var byMid = cfg && cfg.joinBy === "mid";
+  var onBoard = {};
+  rows.forEach(function(r) {
+    var k = byMid ? String(r.merchantId || "").trim() : normName_(r.name || "");
+    if (k) onBoard[k] = 1;
+  });
+  var orphans = [];
+  Object.keys(dep).forEach(function(k) {
+    if (k.charAt(0) === "_" || onBoard[k]) return;
+    var o = dep[k];
+    orphans.push({
+      key: k,
+      name: o.name || k,
+      client: o.client || "",
+      depSum: Math.round(o.sum * 100) / 100,
+      depCnt: o.n,
+      depLast: o.last,
+      depVaType: o.va && o.va.length ? o.va.join(" / ") : "",
+      noOnboarding: true
+    });
+  });
+  orphans.sort(function(a, b) { return b.depSum - a.depSum; });
+  meta.orphans = orphans;
+  return meta;
+}
+
+var VERSION = "2026-09-10-deposit-v4";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -453,6 +564,10 @@ function doGet(e) {
   var data = {
     KRW: attachDeposits_("KRW", readTab(MAP.KRW, {})),
     VND: attachDeposits_("VND", readTab(MAP.VND, {}))
+  };
+  data._dep = {
+    KRW: depBoardMeta_("KRW", data.KRW),
+    VND: depBoardMeta_("VND", data.VND)
   };
   data._version = VERSION;
   data._user = userInfo;
@@ -1104,6 +1219,23 @@ function debugDeposits() {
     }
 
     var rows = attachDeposits_(key, readTab(MAP[key], {}));
+    var m2 = depBoardMeta_(key, rows);
+    Logger.log("  최대 머천트 " + m2.topKey + " " + m2.topSum.toFixed(2) +
+               " (" + (m2.total ? (m2.topSum / m2.total * 100).toFixed(1) : "0") + "%)");
+    if (m2.alt && m2.alt.total) {
+      Logger.log("  구파트너 " + m2.alt.label + ": " + m2.alt.txns + "건 " + m2.alt.total.toFixed(2));
+    }
+    (m2.months || []).forEach(function(x) {
+      Logger.log("    " + x.mo + "  " + x.sum.toFixed(2) + "  " + x.n + "건  머천트 " + x.m +
+                 " (신규 " + x.nw + ")  최대머천트분 " + x.w.toFixed(2) +
+                 (x.a ? "  구파트너 " + x.a.toFixed(2) + " " + x.an + "건" : ""));
+    });
+    if (m2.orphans && m2.orphans.length) {
+      Logger.log("  온보딩 기록 없음 " + m2.orphans.length + "곳: " +
+                 m2.orphans.slice(0, 6).map(function(o) {
+                   return o.name + "(" + o.key + ") " + o.depSum.toFixed(2);
+                 }).join(", "));
+    }
     var matched = rows.filter(function(r) { return r.depSum > 0; });
     var noDep = rows.filter(function(r) { return !r.depSum; });
     Logger.log("  보드 " + rows.length + "행 → 입금 매칭 " + matched.length + " / 미입금 " + noDep.length);
