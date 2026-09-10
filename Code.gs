@@ -192,6 +192,13 @@ function parseAmount_(v) {
   return isNaN(n) ? 0 : n;
 }
 
+/* 빈 셀 판정. getValues()는 빈 셀을 ""로 주지만 수식 결과가 0/공백일 수도 있어 함께 처리한다. */
+function blankCell_(v) {
+  if (v === null || v === undefined) return true;
+  var s = String(v).trim();
+  return s === "" || s === "0";
+}
+
 function depDate_(v, tz) {
   if (v instanceof Date) return Utilities.formatDate(v, tz, "yyyy-MM-dd");
   var s = String(v).trim();
@@ -218,18 +225,31 @@ function readDeposits_(key) {
   var tz = Session.getScriptTimeZone();
   var out = {};
   var skipped = { n: 0, sum: 0 };   // 키(MID/머천트명)가 없어 귀속 불가한 거래
+  // 가드별 탈락 수. 집계가 0으로 나올 때 어느 가드가 먹었는지 debugDeposits()가 이걸 찍는다.
+  var diag = { rows: 0, noRequire: 0, excluded: 0, hasAcct: 0, noAmt: 0, noKey: 0, kept: 0, s: {} };
+  var sample = function(name, v) {
+    if (!diag.s[name]) diag.s[name] = "(" + (typeof v) + ") " + JSON.stringify(String(v)).slice(0, 40);
+  };
 
   for (var r = cfg.skip; r < vals.length; r++) {
     var row = vals[r];
+    diag.rows++;
     // Product 등 필수 컬럼이 빈 행은 원천의 잘린 행이다. VND에 21행 있고, 계좌번호도 비어 있어
     // 가드가 없으면 H-PAY로 오분류된다(+$305,512).
-    if (cfg.requireCol != null && !String(row[cfg.requireCol]).trim()) continue;
-    if (cfg.excludeVal != null && String(row[cfg.excludeCol]).trim() === cfg.excludeVal) continue;
-    if (cfg.blankAcctOnly && String(row[cfg.acctCol]).trim()) continue;   // 구 파트너 제외
+    if (cfg.requireCol != null && blankCell_(row[cfg.requireCol])) {
+      diag.noRequire++; sample("require", row[cfg.requireCol]); continue;
+    }
+    if (cfg.excludeVal != null && String(row[cfg.excludeCol]).trim() === cfg.excludeVal) {
+      diag.excluded++; continue;
+    }
+    if (cfg.blankAcctOnly && !blankCell_(row[cfg.acctCol])) {   // 구 파트너 제외
+      diag.hasAcct++; sample("acct", row[cfg.acctCol]); continue;
+    }
     var amt = parseAmount_(row[cfg.amount]);
-    if (!amt) continue;
+    if (!amt) { diag.noAmt++; sample("amt", row[cfg.amount]); continue; }
     var k = cfg.joinBy === "mid" ? String(row[cfg.keyCol]).trim() : normName_(row[cfg.keyCol]);
-    if (!k) { skipped.n++; skipped.sum += amt; continue; }
+    if (!k) { diag.noKey++; skipped.n++; skipped.sum += amt; continue; }
+    diag.kept++;
 
     var o = out[k];
     if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [] };
@@ -243,6 +263,7 @@ function readDeposits_(key) {
     }
   }
   if (skipped.n) out._skipped = skipped;
+  out._diag = diag;
   try { cache.put(ck, JSON.stringify(out), 300); } catch (e) { /* 6MB 초과 시 캐시 생략 */ }
   return out;
 }
@@ -262,7 +283,7 @@ function attachDeposits_(key, rows) {
   return rows;
 }
 
-var VERSION = "2026-09-10-deposit-v1";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
+var VERSION = "2026-09-10-deposit-v2-diag";  // 배포 확인용 마커. 재배포하면 이 값이 응답에 실림.
 
 function norm(s) {
   return String(s).toLowerCase().replace(/\(for tracking\)/g, "").replace(/[-\s]+/g, " ").trim();
@@ -1041,12 +1062,29 @@ function debugDeposits() {
     if (!sh) { Logger.log("  탭 없음"); return; }
     Logger.log("  시트 행수: " + sh.getLastRow() + " / 열수: " + sh.getLastColumn());
 
+    // 인덱스가 실제 컬럼과 맞는지 눈으로 확인. cfg가 가리키는 열에 * 표시.
+    var mark = {};
+    ["keyCol", "amount", "date", "acctCol", "vaType", "excludeCol", "requireCol"].forEach(function(f) {
+      if (cfg[f] != null) mark[cfg[f]] = (mark[cfg[f]] ? mark[cfg[f]] + "," : "") + f;
+    });
+    var hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    Logger.log("  헤더: " + hdr.map(function(h, i) {
+      return i + ":" + h + (mark[i] ? " <<" + mark[i] : "");
+    }).join(" | "));
+
     CacheService.getScriptCache().remove("dep_" + key);   // 캐시 무시하고 새로 집계
     var dep = readDeposits_(key);
     var keys = Object.keys(dep).filter(function(k) { return k.charAt(0) !== "_"; });
     var total = 0, cnt = 0;
     keys.forEach(function(k) { total += dep[k].sum; cnt += dep[k].n; });
     Logger.log("  머천트 " + keys.length + "곳 · 거래 " + cnt + "건 · 합계 " + total.toFixed(2));
+    if (dep._diag) {
+      var g = dep._diag;
+      Logger.log("  가드 탈락: 읽은행 " + g.rows + " → 필수컬럼공란 " + g.noRequire +
+                 " / 제외값 " + g.excluded + " / 계좌있음(구파트너) " + g.hasAcct +
+                 " / 금액0 " + g.noAmt + " / 키없음 " + g.noKey + " / 채택 " + g.kept);
+      Object.keys(g.s).forEach(function(n) { Logger.log("    탈락샘플 " + n + " = " + g.s[n]); });
+    }
     if (dep._skipped) {
       Logger.log("  ⚠ 키 없어 귀속 불가: " + dep._skipped.n + "건 · " +
                  dep._skipped.sum.toFixed(2) + " (원천에 MID/머천트명이 비어 있음)");
