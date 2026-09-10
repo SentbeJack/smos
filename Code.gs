@@ -179,7 +179,7 @@ var DEPOSITS = {
   KRW: { tab: "[RAW] KRW data", skip: 3, keyCol: 4, amount: 6, date: 5, vaType: 15,
          excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid" },
   VND: { tab: "[RAW] VND data", skip: 1, keyCol: 4, amount: 11, date: 6, acctCol: 5,
-         blankAcctOnly: true, joinBy: "name" }
+         blankAcctOnly: true, requireCol: 0, joinBy: "name" }
 };
 
 function normName_(s) {
@@ -221,6 +221,9 @@ function readDeposits_(key) {
 
   for (var r = cfg.skip; r < vals.length; r++) {
     var row = vals[r];
+    // Product 등 필수 컬럼이 빈 행은 원천의 잘린 행이다. VND에 21행 있고, 계좌번호도 비어 있어
+    // 가드가 없으면 H-PAY로 오분류된다(+$305,512).
+    if (cfg.requireCol != null && !String(row[cfg.requireCol]).trim()) continue;
     if (cfg.excludeVal != null && String(row[cfg.excludeCol]).trim() === cfg.excludeVal) continue;
     if (cfg.blankAcctOnly && String(row[cfg.acctCol]).trim()) continue;   // 구 파트너 제외
     var amt = parseAmount_(row[cfg.amount]);
