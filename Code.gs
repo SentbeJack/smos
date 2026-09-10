@@ -184,7 +184,10 @@ var DEPOSITS = {
          excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid" },
   VND: { tab: "[RAW] VND data", skip: 1, keyCol: 4, amount: 11, date: 6, acctCol: 5,
          nameCol: 4, clientCol: 1,
-         vaMinDigits: 15, altLabel: "Baokim", requireCol: 0, joinBy: "name" }
+         // 보드는 VND를 FI Merchant로 묶는다(GEP·YeePay·Direct-Merchant…). RAW 탭은 직접 머천트를
+         // 회사명 그대로 적으므로, FI/Direct 컬럼을 보고 보드와 같은 라벨로 맞춘다.
+         directCol: 2, directVal: "Direct", directLabel: "Direct-Merchant",
+         vaMinDigits: 15, curLabel: "H-PAY", altLabel: "Baokim", requireCol: 0, joinBy: "name" }
 };
 
 function normName_(s) {
@@ -286,7 +289,7 @@ function readDeposits_(key) {
     if (d && d > o.last) o.last = d;
     // 표시용 이름/클라이언트. 보드에 없는 머천트를 목록에 얹을 때 쓴다.
     if (!o.name && cfg.nameCol != null) o.name = String(row[cfg.nameCol]).trim();
-    if (!o.client && cfg.clientCol != null) o.client = String(row[cfg.clientCol]).trim();
+    if (!o.client && cfg.clientCol != null) o.client = depClient_(cfg, row);
     if (cfg.vaType != null) {
       var vt = String(row[cfg.vaType]).trim();
       if (vt && o.va.indexOf(vt) < 0) o.va.push(vt);
@@ -299,6 +302,14 @@ function readDeposits_(key) {
   out._meta = depMeta_(cfg, out, cur, alt, una, first);
   try { cache.put(ck, JSON.stringify(out), 300); } catch (e) { /* 6MB 초과 시 캐시 생략 */ }
   return out;
+}
+
+/* 입금 원천의 클라이언트 라벨을 보드의 그룹 라벨과 같은 체계로 맞춘다. */
+function depClient_(cfg, row) {
+  if (cfg.directCol != null && String(row[cfg.directCol]).trim() === cfg.directVal) {
+    return cfg.directLabel;
+  }
+  return String(row[cfg.clientCol]).trim();
 }
 
 /* 월 → { sum, n, keys{key:금액} } 누적. 추이·점유율 계산의 공통 적재 함수 */
@@ -353,6 +364,7 @@ function depMeta_(cfg, out, cur, alt, una, first) {
     total: r2(total), txns: txns, merchants: merchants,
     topKey: top, topSum: r2(topSum),
     months: months,
+    cur: { label: cfg.curLabel || "" },
     alt: { label: cfg.altLabel || "", total: r2(altTotal), txns: altTxns },
     unattributed: out._skipped ? { n: out._skipped.n, sum: r2(out._skipped.sum) } : null
   };

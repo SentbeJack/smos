@@ -22,6 +22,8 @@
     --s-vac-t:#0746CA;  --s-vac-b:#C8DBFC;  --s-vac-d:#3176FD;
     --s-live-t:#063D2B; --s-live-b:#C9F7E1; --s-live-d:#00C592;
     --s-rej-t:#B42318;  --s-rej-b:#FCEBEA;  --s-rej-d:#E5533F;
+    /* 순위 램프(집중도). 1위가 가장 진하다 — 순서 자체가 정보라 색상은 명도 단계로 간다. */
+    --rk1:#0746CA; --rk2:#2C6BF0; --rk3:#5B93F8; --rk4:#8FB7FC; --rk5:#C0D6FE; --rk-rest:#E3EAF8;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -142,6 +144,56 @@
     color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:6px 11px; border-radius:999px; white-space:nowrap;}
   .act-pill b{font-family:var(--mono); font-size:11.5px; color:var(--ink-2);}
   .act-pill i{font-family:var(--mono); font-style:normal; font-size:11px; font-weight:700; color:var(--s-live-d);}
+  .dep-share{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--accent);}
+  .noonb-tag{font-size:10.5px; font-weight:650; color:var(--muted); background:var(--surface-2);
+    border:1px solid var(--border); padding:1px 6px; border-radius:4px; white-space:nowrap;}
+
+  /* ---- 입금 분석 뷰 (집중도 · 추이) ---- */
+  .dep-seg{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:9px; padding:3px; margin:0 0 10px;}
+  .dep-seg button{flex:1; font:inherit; font-size:12.5px; font-weight:650; color:var(--muted);
+    background:none; border:0; padding:7px 4px; border-radius:6px; cursor:pointer;}
+  .dep-seg button.on{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  .dp{display:flex; flex-direction:column; gap:12px;}
+  .dp-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:13px;}
+  .dp-head{display:flex; align-items:baseline; gap:8px; margin-bottom:11px;}
+  .dp-title{font-size:13px; font-weight:700; color:var(--ink);}
+  .dp-aside{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--muted);}
+  .dp-kpis{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .dp-kpi{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 11px;}
+  .dp-kpi dt{font-size:10.5px; font-weight:650; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+  .dp-kpi dd{margin:3px 0 0; font-family:var(--mono); font-size:19px; font-weight:700; color:var(--ink); letter-spacing:-.02em;}
+  .dp-kpi dd small{font-size:11px; font-weight:600; color:var(--muted); margin-left:2px;}
+  .dp-stack{display:flex; height:13px; border-radius:7px; overflow:hidden; background:var(--surface-2); margin-bottom:10px;}
+  .dp-stack i{display:block; height:100%;}
+  .dp-leg{display:flex; flex-direction:column; gap:6px;}
+  .dp-li{display:flex; align-items:center; gap:7px; font-size:12px;}
+  .dp-li i{width:9px; height:9px; border-radius:3px; flex:none;}
+  .dp-li .nm{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--ink-2);}
+  .dp-li .nm em{font-family:var(--mono); font-style:normal; font-size:10px; color:var(--muted); margin-left:5px;}
+  .dp-li .sh{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink);}
+  .dp-note{margin:10px 0 0; font-size:11.5px; line-height:1.6; color:var(--muted);}
+  .dp-note b{color:var(--ink-2);}
+  .dp-tw{overflow-x:auto; margin:0 -13px; padding:0 13px;}
+  .dp-tbl{width:100%; border-collapse:collapse; font-size:12px;}
+  .dp-tbl th,.dp-tbl td{padding:6px 7px; border-bottom:1px solid var(--border); text-align:left; white-space:nowrap;}
+  .dp-tbl th{font-size:10.5px; font-weight:650; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;}
+  .dp-tbl td.n,.dp-tbl th.n{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums;}
+  .dp-tbl td.nm{max-width:170px; overflow:hidden; text-overflow:ellipsis;}
+  .dp-tbl tr.mark td{border-bottom:2px solid var(--accent);}
+  .dp-bar{display:flex; align-items:center; gap:9px; margin-bottom:6px;}
+  .dp-bar .mo{font-family:var(--mono); font-size:11px; font-weight:650; color:var(--ink-2); width:52px; flex:none;}
+  .dp-bar .tk{flex:1; display:flex; height:17px; background:var(--surface-2); border-radius:5px; overflow:hidden;}
+  .dp-bar .tk i{display:block; height:100%;}
+  .dp-bar .v{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--muted);
+    flex:none; min-width:62px; text-align:right; font-variant-numeric:tabular-nums;}
+  .dp-mini{display:inline-flex; gap:3px; margin-left:auto;}
+  .dp-mini button{font:inherit; font-size:11px; font-weight:650; color:var(--muted); background:var(--surface-2);
+    border:1px solid var(--border); padding:3px 9px; border-radius:6px; cursor:pointer;}
+  .dp-mini button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
+  .dp-inline{display:flex; flex-wrap:wrap; gap:11px; margin-top:9px; font-size:11px; color:var(--muted);}
+  .dp-inline span{display:inline-flex; align-items:center; gap:5px;}
+  .dp-inline i{width:9px; height:9px; border-radius:3px;}
 
   .detail{max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.3,.7,.3,1);}
   .item.open .detail{max-height:1400px;}
@@ -302,6 +354,7 @@
     --s-vac-t:#6EA8FF;  --s-vac-b:#172040;  --s-vac-d:#3176FD;
     --s-live-t:#58E8A8;  --s-live-b:#122C22;  --s-live-d:#00C592;
     --s-rej-t:#F47868;  --s-rej-b:#2C1818;  --s-rej-d:#E5533F;
+    --rk1:#9CC3FF; --rk2:#7BAEFF; --rk3:#5B93F0; --rk4:#4276CC; --rk5:#2F5899; --rk-rest:#2E3450;
   }
   [data-theme="dark"] header{background:rgba(15,18,25,.92);}
   [data-theme="dark"] .chip.on, [data-theme="dark"] .tabs button.on, [data-theme="dark"] .lang-toggle button.on, [data-theme="dark"] .view-toggle button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
@@ -342,6 +395,7 @@
       <button data-view="forecast">Forecast</button>
     </div>
     <div class="tabs" id="tabs"></div>
+    <div class="dep-seg" id="depSeg"></div>
     <div class="search">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
       <input id="search" type="text" placeholder="상점명 · 고객명 · MID 검색" autocomplete="off">
@@ -356,6 +410,7 @@
     </div>
   </header>
   <main id="list"></main>
+  <div class="dp" id="depPanel" style="display:none"></div>
   <div class="dash" id="dashboard" style="display:none"></div>
   <div class="forecast" id="forecastPanel" style="display:none"></div>
 </div>
@@ -453,6 +508,42 @@ const STRINGS = {
     depVaType:"VA 유형",
     depNone:"입금 없음",
     activation:"입금 전환",
+    dvList:"머천트",
+    dvConc:"집중도",
+    dvTrend:"추이",
+    noOnboarding:"온보딩 기록 없음",
+    noOnboardingNote:"입금은 있는데 온보딩 탭에 행이 없는 머천트입니다. 온보딩 탭이 2026-03부터라 그 전 건은 여기 잡힙니다.",
+    concTop1:"상위 1곳",
+    concTop5:"상위 5곳",
+    concNeed80:"80% 도달",
+    concShare:"머천트별 점유율",
+    concClient:"클라이언트별 점유율",
+    concTable:n=>`상위 ${n}곳`,
+    concClients:n=>`${n}곳`,
+    colMerchant:"머천트",
+    concSrcNote:"온보딩 탭에 없는 머천트는 클라이언트 라벨을 거래 로그에서 가져옵니다.",
+    concRest:n=>`나머지 ${n}곳`,
+    concCum:"누적",
+    concMark:"파란 줄이 누적 80%를 넘는 지점입니다.",
+    concHead:(m,n)=>`머천트 ${m}곳 중 ${n}곳이 전체의 80%를 만듭니다.`,
+    concApproved:(a,d)=>`승인 ${a}곳 중 입금 발생 ${d}곳.`,
+    trendAmount:"월별 입금액",
+    trendMerchants:"월별 입금 머천트 수",
+    trendDetail:"월별 상세",
+    trendAll:"전체",
+    trendExTop:"최대 머천트 제외",
+    trendExisting:"기존",
+    trendNew:"신규",
+    trendNewNote:"신규 = 그 달 첫 입금",
+    trendUnattr:"귀속 불가",
+    trendUnattrNote:(n,v)=>`원천에 머천트명이 없어 귀속하지 못한 ${n}건 ${v}은 머천트 합계에서 빠져 있습니다.`,
+    trendAltNote:l=>`${l}은 구 파트너입니다. 머천트 집계에서는 빠지고 이 차트에서만 비교용으로 보입니다.`,
+    colMonth:"월",
+    colAmount:"입금액",
+    colCount:"건수",
+    colMerchants:"머천트",
+    colTopMerchant:"최대 머천트",
+    depEmpty:"입금 데이터가 없습니다.",
     shareLabel:"📋 공유용 복사",
     summaryCopied:"현황 요약이 복사됐어요",
     vaIssued:"VA 발급",
@@ -529,6 +620,42 @@ const STRINGS = {
     depVaType:"VA type",
     depNone:"No deposit",
     activation:"Activation",
+    dvList:"Merchants",
+    dvConc:"Concentration",
+    dvTrend:"Trend",
+    noOnboarding:"No onboarding record",
+    noOnboardingNote:"Merchants with deposits but no onboarding row. The onboarding tab starts at 2026-03, so anything earlier lands here.",
+    concTop1:"Top 1",
+    concTop5:"Top 5",
+    concNeed80:"To reach 80%",
+    concShare:"Share by merchant",
+    concClient:"Share by client",
+    concTable:n=>`Top ${n} merchants`,
+    concClients:n=>`${n} client${n===1?"":"s"}`,
+    colMerchant:"Merchant",
+    concSrcNote:"Merchants missing from the onboarding tab take their client label from the transaction log.",
+    concRest:n=>`Other ${n}`,
+    concCum:"Cumulative",
+    concMark:"The blue row is where the cumulative share passes 80%.",
+    concHead:(m,n)=>`${n} of ${m} merchants make up 80% of the total.`,
+    concApproved:(a,d)=>`${d} of ${a} approved merchants have deposited.`,
+    trendAmount:"Deposits by month",
+    trendMerchants:"Depositing merchants by month",
+    trendDetail:"Monthly detail",
+    trendAll:"All",
+    trendExTop:"Excluding top merchant",
+    trendExisting:"Returning",
+    trendNew:"New",
+    trendNewNote:"New = first deposit that month",
+    trendUnattr:"Unattributed",
+    trendUnattrNote:(n,v)=>`${n} transactions totalling ${v} carry no merchant name in the source and are excluded from merchant totals.`,
+    trendAltNote:l=>`${l} is the previous partner. It is excluded from merchant totals and appears here for comparison only.`,
+    colMonth:"Month",
+    colAmount:"Deposits",
+    colCount:"Txns",
+    colMerchants:"Merchants",
+    colTopMerchant:"Top merchant",
+    depEmpty:"No deposit data.",
     shareLabel:"📋 Copy summary",
     summaryCopied:"Summary copied",
     vaIssued:"VA issued",
@@ -556,6 +683,8 @@ const STRINGS = {
 };
 let lang = "KR";
 const L = k => STRINGS[lang][k] || k;
+/* 값이 함수인 문자열(수를 끼워 넣는 문장)용. L()은 함수 자체를 돌려주므로 여기서 호출한다. */
+const LF = (k,...a) => { const v=STRINGS[lang][k]; return typeof v==="function"?v(...a):(v||k); };
 
 /* ---- Corridor schemas ---- */
 const CORRIDORS = {
@@ -586,7 +715,7 @@ const CORRIDORS = {
       {key:"result", label:"심사", labelEn:"Review"},
       {key:"va", label:"VA 발급", labelEn:"VA Issued"},
     ],
-    currency:"KRW",
+    currency:"KRW", depJoin:"mid",
   },
   VND:{
     label:"VND",
@@ -616,7 +745,7 @@ const CORRIDORS = {
       {key:"va", label:"VA 발급", labelEn:"VA Issued"},
     ],
     /* [RAW] VND data의 H-PAY 거래(수취계좌 공란)를 머천트명으로 합산한 USD */
-    currency:"USD",
+    currency:"USD", depJoin:"name",
   },
 };
 
@@ -690,6 +819,34 @@ function fmtMoneyFull(v,cur){
 /* 승인 완료인데 입금이 0인 건 — Sales 후속 대상 */
 const isNoDeposit = r => CORR().success.includes(r.status) && !(Number(r.depSum)||0);
 
+/* 백엔드가 내려준 코리도별 입금 메타(_dep). 없으면 빈 값으로 동작해 구 백엔드와도 깨지지 않는다. */
+function DEP(){ return (Store.data && Store.data._dep && Store.data._dep[active]) || {}; }
+
+/* 입금은 있는데 온보딩 탭에 행이 없는 머천트를 목록에 올릴 행으로 바꾼다.
+ * id는 키에서 만들어 렌더마다 같아야 한다 — 안 그러면 펼친 상태가 풀린다. */
+function orphanRows(){
+  const nf=nameField(), gf=groupField(), byMid=CORR().depJoin==="mid";
+  return (DEP().orphans||[]).map(o=>{
+    const r={ id:"orph-"+o.key, status:"", noOnboarding:true, client:o.client||"",
+      depSum:o.depSum, depCnt:o.depCnt, depLast:o.depLast, depVaType:o.depVaType||"" };
+    if(byMid) r.merchantId=o.key;
+    r[nf]=o.name; r[gf]=o.client||L("noGroup");
+    return r;
+  });
+}
+
+/* 보드 행 → 입금 집계 키. 백엔드 normName_과 같은 규칙이어야 한다. */
+function depKeyOf(r){
+  if(CORR().depJoin==="mid") return String(r.merchantId||"").trim();
+  return String(r[nameField()]||"").toUpperCase().replace(/^SB\s+/,"").replace(/[^A-Z0-9]/g,"");
+}
+
+/* 전체 입금액 대비 점유율. 분모는 백엔드 합계라 화면 필터에 흔들리지 않는다. */
+function depShare(v){
+  const t=Number(DEP().total)||0;
+  return t ? (Number(v)||0)/t*100 : 0;
+}
+
 function stepOf(r){
   const c=CORR(); if(!c.steps) return null;
   const n=c.steps.length;
@@ -747,7 +904,9 @@ function clipCopy(text,msg){ navigator.clipboard.writeText(text).then(()=>toast(
 let active = "KRW";
 let filter = "all";
 let query = "";
-let sortMode = "group";
+let sortMode = "deposit";   // 입금이 붙은 뒤로는 "얼마 들어왔나"가 첫 질문이라 입금순이 기본
+let depView = "list";       // list | conc | trend
+let trendExTop = false;     // 추이에서 최대 머천트를 빼고 볼지
 let dashMode = false;
 let darkTheme = false;
 let forecastMode = false;
@@ -778,12 +937,17 @@ function render(){
   const db=$("#btnDashboard"); db.textContent="📊 "+L("dashboard"); db.classList.toggle("dash-on",dashMode);
   renderTabs(); updateSync();
   if(forecastMode){ renderForecast(); return; }
-  $(".search").style.display="";
-  $("#chips").style.display="";
-  $(".toolbar").style.display="";
   $("#forecastPanel").style.display="none";
-  $("#list").style.display=dashMode?"none":"";
+  renderDepSeg();
+  // 집중도·추이는 목록 도구(검색·칩·정렬)가 걸리지 않는 별도 화면이다.
+  const analytic = depView!=="list" && !dashMode;
+  $(".search").style.display=analytic?"none":"";
+  $("#chips").style.display=analytic?"none":"";
+  $(".toolbar").style.display=analytic?"none":"";
+  $("#depPanel").style.display=analytic?"":"none";
+  $("#list").style.display=(dashMode||analytic)?"none":"";
   $("#dashboard").style.display=dashMode?"":"none";
+  if(analytic){ $("#depPanel").innerHTML = depView==="conc"?concHTML():trendHTML(); return; }
   renderChips();
   if(dashMode){ renderDash(); return; }
 
@@ -835,7 +999,38 @@ function render(){
       </div>`;
     }
   }
+  html += orphanGroupHTML();
   $("#list").innerHTML=html;
+}
+
+/* 온보딩 기록 없는 머천트는 클라이언트 그룹에 섞지 않고 맨 아래 별도 그룹으로 둔다.
+ * 상태값이 없어 승인율·퍼널 통계에 섞이면 수치가 오염되기 때문이다. */
+function orphanGroupHTML(){
+  if(filter!=="all") return "";
+  let list=orphanRows();
+  if(query){
+    const q=query.toLowerCase(), nf=nameField();
+    list=list.filter(r=>[nf,"merchantId","client"].some(f=>String(r[f]||"").toLowerCase().includes(q)));
+  }
+  if(!list.length) return "";
+  list.sort((a,b)=>b.depSum-a.depSum);
+  const sum=list.reduce((a,r)=>a+r.depSum,0);
+  const g=L("noOnboarding");
+  const isOpen = !!query || openGroups.has(active+"|"+g);
+  return `<div class="group ${isOpen?'open':''} g-noonb" data-g="${esc(g)}">
+    <div class="group-head" data-act="tg-group">
+      <svg class="chev" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="group-name">${esc(g)}</span>
+      <div class="group-meta">
+        <span class="dep-sum">${fmtMoney(sum)}</span>
+        <div class="ratio"><span class="ratio-txt">${list.length}</span></div>
+      </div>
+    </div>
+    <div class="rows"><div class="rows-inner">
+      ${list.map(r=>itemHTML(r)).join("")}
+      <p class="dp-note" style="padding:0 10px 10px">${L("noOnboardingNote")}</p>
+    </div></div>
+  </div>`;
 }
 
 function itemHTML(r){
@@ -848,8 +1043,10 @@ function itemHTML(r){
   const attnCls=attn==="high"?"attn-high":"";
   const dep=Number(r.depSum)||0;
   const noDep=isNoDeposit(r);
+  const sh = dep ? depShare(dep) : 0;
   const depBadge = dep
     ? `<div class="dep-badge"><span class="dep-amt">${fmtMoney(dep)}</span>${
+         sh>=0.05?`<span class="dep-share">${sh.toFixed(1)}%</span>`:""}${
          r.depCnt?`<span class="dep-meta">${r.depCnt}${lang==="EN"?"":"건"}${r.depLast?" · "+r.depLast.slice(5).replace("-","/"):""}</span>`:""}</div>`
     : noDep ? `<div class="dep-badge none"><span class="dep-amt">${L("noDeposit")}</span></div>` : "";
   return `<div class="item ${isOpen?'open':''} ${attnCls} ${noDep?'no-dep':''}" data-id="${r.id}">
@@ -858,18 +1055,19 @@ function itemHTML(r){
         <div class="item-name">${esc(r[nameField()])||`<span style="color:var(--muted)">${L("noName")}</span>`}</div>
         <div class="item-sub">
           ${mid?`<span class="mid">${esc(mid)}</span>`:``}
+          ${r.noOnboarding?`<span class="noonb-tag">${L("noOnboarding")}</span>`:``}
           ${(()=>{const bc=colOf("bank"); return bc&&r[bc.field]?`<span class="bank-chip">${esc(r[bc.field])}</span>`:``})()}
           ${r.va?`<span class="va-flag va-yes" data-act="copy-va" data-va="${esc(r.va)}">VA ✓</span>`:``}
           ${reason?`<span class="reason-chip">${esc(reason)}</span>`:``}
           ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>{const u=r[c.field],href=/^https?:\/\//i.test(u)?u:"https://"+u; return `<a class="url-chip" href="${esc(href)}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`;}).join("")}
         </div>
       </div>
-      <div class="item-right">${depBadge}${statusBadge(r.status)}</div>
+      <div class="item-right">${depBadge}${r.noOnboarding?"":statusBadge(r.status)}</div>
     </div>
-    ${stepTracker(r)}
+    ${r.noOnboarding?"":stepTracker(r)}
     <div class="detail"><div class="detail-inner">
       ${depDetail(r)}
-      ${CORR().columns.filter(c=>!c.role || c.role==="status").map(c=>detailRow(r,c)).filter(Boolean).join("")}
+      ${r.noOnboarding?"":CORR().columns.filter(c=>!c.role || c.role==="status").map(c=>detailRow(r,c)).filter(Boolean).join("")}
       <button class="share-btn" data-act="copy-summary" data-id="${r.id}">${L("shareLabel")}</button>
     </div></div>
   </div>`;
@@ -882,8 +1080,9 @@ function depDetail(r){
     return `<div class="d-item"><span class="d-key">${L("depTotal")}</span>
       <span class="d-val"><span class="dep-warn">${L("depNone")}</span></span></div>`;
   }
+  const sh=depShare(dep);
   let h=`<div class="d-item"><span class="d-key">${L("depTotal")}</span>
-    <span class="d-val mono">${fmtMoneyFull(dep)}</span></div>`;
+    <span class="d-val mono">${fmtMoneyFull(dep)}${sh>=0.05?` <span class="dep-share">${sh.toFixed(2)}%</span>`:""}</span></div>`;
   if(r.depCnt) h+=`<div class="d-item"><span class="d-key">${L("depCount")}</span>
     <span class="d-val mono">${r.depCnt}${lang==="EN"?"":"건"}</span></div>`;
   if(r.depLast) h+=`<div class="d-item"><span class="d-key">${L("depLast")}</span>
@@ -906,6 +1105,171 @@ function detailRow(r,c){
   else if(c.field==="va") val=`<span class="va-copy" data-act="copy-va" data-va="${esc(v)}"><span>${esc(v)}</span><svg class="copy-ic" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 11V3.5a1.5 1.5 0 011.5-1.5H11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>`;
   else val=`<span class="${c.mono?'mono':''}">${esc(v)}</span>`;
   return `<div class="d-item"><span class="d-key">${lbl}</span><span class="d-val ${c.mono&&c.type!=='url'?'mono':''}">${val}</span></div>`;
+}
+
+function renderDepSeg(){
+  const seg=$("#depSeg");
+  // 입금 데이터가 없는 백엔드/코리도에서는 토글 자체를 감춘다.
+  if(!(Number(DEP().total)||0)){ seg.style.display="none"; depView="list"; return; }
+  seg.style.display="";
+  seg.innerHTML=[["list","dvList"],["conc","dvConc"],["trend","dvTrend"]]
+    .map(([v,k])=>`<button data-dv="${v}" class="${depView===v?"on":""}">${L(k)}</button>`).join("");
+}
+
+/* ---- 집중도: 어느 머천트가 볼륨을 만드는가 ---- */
+function concHTML(){
+  const meta=DEP(), total=Number(meta.total)||0;
+  // 같은 입금 키가 보드에 두 행으로 있으면(예: MID 중복 입력) 같은 돈이 두 번 세어져
+  // 점유율 합이 100%를 넘는다. 키 단위로 접어서 센다.
+  const seen=new Set();
+  const all=Store.rows().concat(orphanRows())
+    .filter(r=>(Number(r.depSum)||0)>0)
+    .filter(r=>{ const k=depKeyOf(r)||r.id; if(seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a,b)=>b.depSum-a.depSum);
+  if(!all.length) return `<div class="dp-card"><p class="dp-note">${L("depEmpty")}</p></div>`;
+  const nf=nameField();
+  const pct=v=>total?v/total*100:0;
+
+  // 누적 80%에 몇 곳이 필요한가
+  let cum=0, need80=0;
+  for(const r of all){ cum+=pct(r.depSum); need80++; if(cum>=80) break; }
+
+  const top5=all.slice(0,5);
+  const restPct=Math.max(0, 100-top5.reduce((a,r)=>a+pct(r.depSum),0));
+  const stack=top5.map((r,i)=>`<i style="width:${pct(r.depSum).toFixed(2)}%;background:var(--rk${i+1})" title="${esc(r[nf])} ${pct(r.depSum).toFixed(1)}%"></i>`).join("")
+    +(restPct>0?`<i style="width:${restPct.toFixed(2)}%;background:var(--rk-rest)" title="${LF("concRest",all.length-top5.length)} ${restPct.toFixed(1)}%"></i>`:"");
+  const leg=top5.map((r,i)=>`<div class="dp-li"><i style="background:var(--rk${i+1})"></i>
+      <span class="nm">${esc(r[nf])||L("noName")}${r.merchantId?`<em>${esc(r.merchantId)}</em>`:""}</span>
+      <span class="sh">${pct(r.depSum).toFixed(2)}%</span></div>`).join("")
+    +(all.length>5?`<div class="dp-li"><i style="background:var(--rk-rest)"></i>
+      <span class="nm">${LF("concRest",all.length-5)}</span><span class="sh">${restPct.toFixed(2)}%</span></div>`:"");
+
+  // 클라이언트별
+  const gf=groupField(), byC={};
+  all.forEach(r=>{ const c=r[gf]||L("noGroup"); (byC[c]=byC[c]||{s:0,n:0}).s+=Number(r.depSum)||0; byC[c].n++; });
+  const cl=Object.keys(byC).map(c=>[c,byC[c].s,byC[c].n]).sort((a,b)=>b[1]-a[1]);
+  const clHTML=cl.map(([c,s,n],i)=>`<div class="dp-li"><i style="background:var(--rk${Math.min(i+1,5)})"></i>
+      <span class="nm">${esc(c)}<em>${n}${lang==="EN"?"":"곳"}</em></span>
+      <span class="sh">${pct(s).toFixed(2)}%</span></div>`).join("");
+
+  // 상위 테이블. 점유율 막대는 1위 기준으로 정규화해 하위권도 보이게 한다.
+  const rows=all.slice(0,15);
+  let c2=0;
+  const tr=rows.map((r,i)=>{ c2+=pct(r.depSum);
+    return `<tr class="${i===need80-1?"mark":""}"><td class="n">${i+1}</td>
+      <td class="nm" title="${esc(r[nf])}">${esc(r[nf])||L("noName")}</td>
+      <td class="n">${fmtMoney(r.depSum)}</td>
+      <td class="n">${pct(r.depSum).toFixed(2)}%</td>
+      <td class="n">${c2.toFixed(1)}%</td></tr>`; }).join("");
+
+  // 승인 곳수도 같은 키 기준으로 센다. 위의 "머천트 N곳"과 한 문장에 나오므로 기준이 달라선 안 된다.
+  const apprKeys=new Set(), depKeys=new Set();
+  Store.rows().forEach(r=>{
+    if(!CORR().success.includes(r.status)) return;
+    const k=depKeyOf(r)||r.id;
+    apprKeys.add(k);
+    if((Number(r.depSum)||0)>0) depKeys.add(k);
+  });
+  const appr=apprKeys.size, withDep=depKeys.size;
+
+  return `
+  <div class="dp-kpis">
+    <div class="dp-kpi"><dt>${L("concTop1")}</dt><dd>${pct(all[0].depSum).toFixed(1)}<small>%</small></dd></div>
+    <div class="dp-kpi"><dt>${L("concTop5")}</dt><dd>${top5.reduce((a,r)=>a+pct(r.depSum),0).toFixed(1)}<small>%</small></dd></div>
+    <div class="dp-kpi"><dt>${L("concNeed80")}</dt><dd>${need80}<small>${lang==="EN"?"":"곳"}</small></dd></div>
+  </div>
+  <div class="dp-card">
+    <div class="dp-head"><span class="dp-title">${L("concShare")}</span>
+      <span class="dp-aside">${fmtMoney(total)}</span></div>
+    <div class="dp-stack">${stack}</div>
+    <div class="dp-leg">${leg}</div>
+    <p class="dp-note">${LF("concHead",all.length,need80)}
+      ${appr?" "+LF("concApproved",appr,withDep):""}</p>
+  </div>
+  <div class="dp-card">
+    <div class="dp-head"><span class="dp-title">${L("concClient")}</span>
+      <span class="dp-aside">${LF("concClients",cl.length)}</span></div>
+    <div class="dp-leg">${clHTML}</div>
+    ${all.some(r=>r.noOnboarding)?`<p class="dp-note">${L("concSrcNote")}</p>`:""}
+  </div>
+  <div class="dp-card">
+    <div class="dp-head"><span class="dp-title">${LF("concTable",rows.length)}</span>
+      <span class="dp-aside">${L("concCum")}</span></div>
+    <div class="dp-tw"><table class="dp-tbl">
+      <thead><tr><th class="n">#</th><th>${L("colMerchant")}</th>
+        <th class="n">${L("colAmount")}</th><th class="n">%</th><th class="n">${L("concCum")}</th></tr></thead>
+      <tbody>${tr}</tbody></table></div>
+    <p class="dp-note">${L("concMark")}</p>
+  </div>`;
+}
+
+/* ---- 추이: 월별 입금액·머천트 수 ---- */
+function trendHTML(){
+  const meta=DEP(), ms=meta.months||[];
+  if(!ms.length) return `<div class="dp-card"><p class="dp-note">${L("depEmpty")}</p></div>`;
+  const hasAlt=(Number(meta.alt&&meta.alt.total)||0)>0;
+  const hasUna=ms.some(m=>m.u>0);
+  const ex=trendExTop && !hasAlt;   // 구 파트너가 있는 코리도는 2계열 비교가 우선이라 토글을 쓰지 않는다
+
+  // w는 그 달 최대 머천트 기여분이라 sum을 넘을 수 없지만, 넘더라도 음수 금액을 찍지 않는다.
+  const amt=m=>Math.max(0, ex?m.sum-m.w:m.sum);
+  const rowTotal=m=>amt(m)+(hasAlt?m.a:0)+m.u;
+  const mx=Math.max(1,...ms.map(rowTotal));
+  const seg=(v,c)=>v>0?`<i style="width:${(v/mx*100).toFixed(2)}%;background:var(${c})" title="${fmtMoney(v)}"></i>`:"";
+  const bars=ms.map(m=>`<div class="dp-bar"><span class="mo">${m.mo.slice(2)}</span>
+      <span class="tk">${seg(amt(m),"--accent")}${hasAlt?seg(m.a,"--muted"):""}${seg(m.u,"--s-vaw-d")}</span>
+      <span class="v">${rowTotal(m)?fmtMoney(rowTotal(m)):"—"}</span></div>`).join("");
+
+  const mmx=Math.max(1,...ms.map(m=>m.m));
+  const mbars=ms.map(m=>`<div class="dp-bar"><span class="mo">${m.mo.slice(2)}</span>
+      <span class="tk">${m.m-m.nw>0?`<i style="width:${((m.m-m.nw)/mmx*100).toFixed(2)}%;background:var(--accent)"></i>`:""}${
+        m.nw>0?`<i style="width:${(m.nw/mmx*100).toFixed(2)}%;background:var(--s-live-d)"></i>`:""}</span>
+      <span class="v">${m.m||"—"}${m.nw?` <span style="color:var(--s-live-d)">+${m.nw}</span>`:""}</span></div>`).join("");
+
+  const tr=ms.map(m=>`<tr><td>${m.mo}</td>
+      <td class="n">${m.sum?fmtMoney(m.sum):"—"}</td>
+      ${hasAlt?`<td class="n">${m.a?fmtMoney(m.a):"—"}</td>`:`<td class="n">${m.w?fmtMoney(m.w):"—"}</td>`}
+      <td class="n">${m.n||"—"}</td><td class="n">${m.m||"—"}</td><td class="n">${m.nw||"—"}</td></tr>`).join("");
+
+  const curLabel=(meta.cur&&meta.cur.label)||L("colAmount");
+  const legend=[`<span><i style="background:var(--accent)"></i>${
+      ex?L("trendExTop"):esc(curLabel)}</span>`]
+    .concat(hasAlt?[`<span><i style="background:var(--muted)"></i>${esc(meta.alt.label)}</span>`]:[])
+    .concat(hasUna?[`<span><i style="background:var(--s-vaw-d)"></i>${L("trendUnattr")}</span>`]:[]).join("");
+
+  const toggle = hasAlt ? "" : `<span class="dp-mini">
+      <button data-tm="all" class="${trendExTop?"":"on"}">${L("trendAll")}</button>
+      <button data-tm="ex" class="${trendExTop?"on":""}">${L("trendExTop")}</button></span>`;
+
+  const notes=[];
+  if(hasAlt) notes.push(LF("trendAltNote",meta.alt.label));
+  if(hasUna && meta.unattributed) notes.push(LF("trendUnattrNote",meta.unattributed.n,fmtMoney(meta.unattributed.sum)));
+  if(!hasAlt && meta.topKey) notes.push(`${L("trendExTop")}: <b>${esc(meta.topKey)}</b> ${fmtMoney(meta.topSum)} (${depShare(meta.topSum).toFixed(1)}%)`);
+
+  return `
+  <div class="dp-card">
+    <div class="dp-head"><span class="dp-title">${L("trendAmount")}</span>${toggle}</div>
+    ${bars}
+    <div class="dp-inline">${legend}</div>
+    ${notes.length?`<p class="dp-note">${notes.join("<br>")}</p>`:""}
+  </div>
+  <div class="dp-card">
+    <div class="dp-head"><span class="dp-title">${L("trendMerchants")}</span>
+      <span class="dp-aside">${hasAlt?esc(curLabel)+" · ":""}${L("trendNewNote")}</span></div>
+    ${mbars}
+    <div class="dp-inline">
+      <span><i style="background:var(--accent)"></i>${L("trendExisting")}</span>
+      <span><i style="background:var(--s-live-d)"></i>${L("trendNew")}</span></div>
+  </div>
+  <div class="dp-card">
+    <div class="dp-head"><span class="dp-title">${L("trendDetail")}</span>
+      <span class="dp-aside">${fmtMoney(meta.total)} · ${meta.txns}${lang==="EN"?"":"건"}</span></div>
+    <div class="dp-tw"><table class="dp-tbl">
+      <thead><tr><th>${L("colMonth")}</th><th class="n">${L("colAmount")}</th>
+        <th class="n">${hasAlt?esc(meta.alt.label):L("colTopMerchant")}</th>
+        <th class="n">${L("colCount")}</th><th class="n">${L("colMerchants")}</th><th class="n">${L("trendNew")}</th></tr></thead>
+      <tbody>${tr}</tbody></table></div>
+  </div>`;
 }
 
 function renderTabs(){
@@ -937,6 +1301,8 @@ $("#langToggle").addEventListener("click",e=>{ const b=e.target.closest("button"
 $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; active=b.dataset.tab; filter="all"; query=""; $("#search").value=""; render(); if(dashMode) renderDash(); });
 $("#search").addEventListener("input",e=>{ query=e.target.value.trim(); render(); });
 $("#chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b)return; filter=b.dataset.filter; render(); });
+$("#depSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; depView=b.dataset.dv; dashMode=false; render(); window.scrollTo(0,0); });
+$("#depPanel").addEventListener("click",e=>{ const b=e.target.closest("[data-tm]"); if(!b)return; trendExTop=b.dataset.tm==="ex"; render(); });
 $("#btnSort").addEventListener("click",()=>{
   sortMode = sortMode==="group" ? "recent" : sortMode==="recent" ? "deposit" : "group";
   render();
@@ -946,7 +1312,7 @@ $("#list").addEventListener("click",e=>{
   const el=e.target.closest("[data-act]"); if(!el)return;
   const act=el.dataset.act;
   if(act==="copy-va"){ e.stopPropagation(); clipCopy(el.dataset.va, L("vaCopied")); return; }
-  if(act==="copy-summary"){ e.stopPropagation(); const r=Store.rows().find(x=>x.id===el.dataset.id); if(r) clipCopy(buildSummary(r), L("summaryCopied")); return; }
+  if(act==="copy-summary"){ e.stopPropagation(); const r=Store.rows().concat(orphanRows()).find(x=>x.id===el.dataset.id); if(r) clipCopy(buildSummary(r), L("summaryCopied")); return; }
   if(act==="link") return;
   const groupEl=e.target.closest(".group"), itemEl=e.target.closest(".item");
   const g=groupEl?.dataset.g, id=itemEl?.dataset.id;
@@ -976,6 +1342,7 @@ $("#themeToggle").addEventListener("click",()=>{
 /* ============================ Dashboard ============================ */
 $("#btnDashboard").addEventListener("click",()=>{
   dashMode=!dashMode;
+  if(dashMode) depView="list";
   $("#list").style.display=dashMode?"none":"";
   $("#dashboard").style.display=dashMode?"":"none";
   $("#btnDashboard").classList.toggle("dash-on",dashMode);
@@ -1188,6 +1555,8 @@ function renderForecast(){
   $(".toolbar").style.display="none";
   $("#list").style.display="none";
   $("#dashboard").style.display="none";
+  $("#depSeg").style.display="none";
+  $("#depPanel").style.display="none";
   $("#forecastPanel").style.display="";
   if(!forecastData){ fetchForecast(); return; }
   const d=forecastData[active];
