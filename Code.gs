@@ -135,6 +135,10 @@ function escHtml_(s) {
 var MAP = {
   KRW: {
     tab: "KRW",
+    /* KRW 탭에 VND 수납 건이 섞여 들어오기 시작했다(2026-09, `Collection Type` 컬럼 신설).
+     * 코리도 보드는 수납 통화로 갈라야 혼란이 없다 — VND 건은 VND 탭에서 본다.
+     * 컬럼은 헤더명으로 찾으므로 시트에서 열 위치가 또 밀려도 따라간다. */
+    excludeWhen: { header: "Collection Type", values: ["VND"] },
     fields: {
       client: "Client",
       name: "Sub- Merchant Name",
@@ -485,6 +489,21 @@ function findCol_(headers, spec) {
   return -1;
 }
 
+/* 다른 수납 통화 건이 섞여 들어온 행을 가리는 판정. 헤더명으로 컬럼을 찾는다.
+ * 보드(readTab)와 Slack(pollStatusChanges)이 각자 탭을 읽으므로 판정은 한 곳에 있어야 한다 —
+ * 한쪽만 걸러지면 보드에 없는 머천트로 알림이 온다.
+ * 컬럼이 없으면 아무것도 가리지 않는다: 시트가 되돌아가도 조용히 전부 통과한다. */
+function excluder_(cfg, normHeaders) {
+  var pass = function() { return false; };
+  var ex = cfg && cfg.excludeWhen;
+  if (!ex || !ex.values || !ex.values.length) return pass;
+  var ci = normHeaders.indexOf(norm(ex.header));
+  if (ci < 0) return pass;
+  var bad = {};
+  ex.values.forEach(function(v) { bad[String(v).toLowerCase().trim()] = 1; });
+  return function(row) { return !!bad[String(row[ci]).toLowerCase().trim()]; };
+}
+
 function readTab(cfg, dbg) {
   var sh = SpreadsheetApp.openById(getSheetId_()).getSheetByName(cfg.tab);
   if (!sh) { if (dbg) dbg.error = "tab not found: " + cfg.tab; return []; }
@@ -501,11 +520,15 @@ function readTab(cfg, dbg) {
   }
   if (dbg) { dbg.rawHeaders = vals[0]; dbg.matched = Object.keys(idx); }
 
+  var isExcluded = excluder_(cfg, headers);
+  var excluded = 0;
+
   var tz = Session.getScriptTimeZone();
   var out = [];
   for (var r = 1; r < vals.length; r++) {
     var row = vals[r];
     if (cfg.requiredCol != null && !String(row[cfg.requiredCol]).trim()) continue;
+    if (isExcluded(row)) { excluded++; continue; }
     var o = { id: cfg.tab + "-" + r };
     var has = false;
     for (var key in idx) {
@@ -526,6 +549,12 @@ function readTab(cfg, dbg) {
       if (v) has = true;
     }
     if (has && (o.name || o.merchantId)) out.push(o);
+  }
+  // 조용히 사라지지 않게 남긴다. 보드 행수가 시트와 안 맞을 때 여기부터 본다.
+  if (excluded) {
+    Logger.log(cfg.tab + ": " + excluded + "행 제외 (" +
+               cfg.excludeWhen.header + " = " + cfg.excludeWhen.values.join("/") + ")");
+    if (dbg) dbg.excluded = excluded;
   }
   return out;
 }
@@ -1033,6 +1062,8 @@ function pollStatusChanges() {
       if (headers[i].indexOf("failed reason") >= 0) failReasonCol = i;
     }
     if (statusCol < 0) { Logger.log(tab + ": status column not found"); return; }
+    // 보드가 가리는 행(다른 수납 통화)은 알림도 보내지 않는다. 같은 판정을 쓴다.
+    var isExcluded = excluder_(MAP[tab], headers);
 
     for (var r = 1; r < vals.length; r++) {
       var row = vals[r];
@@ -1042,6 +1073,7 @@ function pollStatusChanges() {
       var status = String(row[statusCol]).trim();
       if (!name && !mid) continue;
       if (!status) continue;
+      if (isExcluded(row)) continue;
 
       var rowKey = tab + ":" + (mid || name || r);
       var prevStatus = statusSnap[rowKey] || "";
