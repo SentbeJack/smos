@@ -195,7 +195,7 @@ KRW `SLA` 분포: 최소 1일 · 최대 191일 · 평균 15.4일 (111건, SENTBE
 | 항목 | URL |
 |------|-----|
 | GitHub Pages | https://sentbejack.github.io/smos/ |
-| Apps Script | `AKfycby47m1...eGMgHiA` (현재 배포) |
+| Apps Script | `AKfycbwLnplb...AApTV-yQ` (현재 배포, v7.10) — 정본은 `index.html`의 `BACKEND_URL` |
 | Google Sheet | `18duKGwDXB0V...7U2hE` |
 | Slack Channel | #smos-alerts |
 
@@ -204,6 +204,8 @@ KRW `SLA` 분포: 최소 1일 · 최대 191일 · 평균 15.4일 (111건, SENTBE
 ## 배포 기록 (Changelog)
 
 ### v7.10 — 2026-09-11
+- BACKEND_URL 업데이트 — v7.9(`Lead Time`·`조용해짐` 칩)와 아래 수납 통화 제외를 실은 배포 반영.
+  교체 전 엔드포인트 확인: 토큰 없이 `{"error":"forbidden"}` — 인증 게이트 정상
 - **KRW 탭의 VND 수납 건 제외** — 시트에 `Collection Type` 컬럼이 생기며 두 수납 통화가 섞였다.
   코리도 보드는 수납 통화로 갈라야 혼란이 없다
   - 현재 대상 1건: `ZHIYE LIMITED` / `MCID000499` (Jivara, Succeeded, 시트 123행)
