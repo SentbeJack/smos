@@ -1074,14 +1074,29 @@ function pollStatusChanges() {
 }
 
 /* ---- 장기 체류 알림 (일일 트리거) ----
- * 같은 상태로 STALE_DAYS 이상 머문 건을 하루 한 번 묶어 보낸다.
- * 건별로 보내면 소음이 되고, 애초에 "오래 방치됐다"는 건 실시간 사건이 아니다.
+ * 같은 상태로 STALE_DAYS 이상 머문 건을 알린다.
  *
- * 기준일 선정 근거(2026-09-11 실데이터): 미완결 KRW 8건의 경과일은
+ * 반복을 막는 방식이 중요하다. 조건이 유지되는 동안 매일 보내면 같은 줄이 수십 번 오고
+ * (108일 체류 건이면 94번), "사람이 처리하면 목록에서 빠진다"에 기대는 건 책임 전가다.
+ * 그래서 단계 승격으로 판단한다 — T·2T·4T…를 넘는 순간에만 한 번씩 알린다.
+ * 108일 건은 14·28·56일에 세 번 알리고 그 사이에는 조용하다.
+ * 조건이 해소되면(종결 상태가 되면) 스냅샷에서 지워, 재발하면 다시 처음부터 알린다.
+ * 전부 경과일만 보고 시스템이 판단하며 사람의 처리 여부에 의존하지 않는다.
+ *
+ * 기준일 근거(2026-09-11 실데이터): 미완결 KRW 8건의 경과일은
  * 108 · 23 · 23 · 15 · 2 · 1 · 1 · 1일. 7일→4건 / 14일→4건 / 21일→3건 / 30일→1건.
  * SLA 대부분이 1~3일에 끝나므로 14일은 충분히 관대하면서 방치 건만 걸러낸다.
  */
 var STALE_DAYS = 14;
+var STALE_SNAP_KEY = "stale_alert_snap";
+
+/* 경과일이 도달한 승격 단계. T, 2T, 4T… 중 days 이하인 가장 큰 값. 미달이면 0. */
+function escalationStep_(days, threshold) {
+  if (!threshold || days < threshold) return 0;
+  var step = threshold;
+  while (days >= step * 2) step *= 2;
+  return step;
+}
 
 /* 종결 상태가 아니면서 요청일로부터 STALE_DAYS 이상 지난 행. 경과일 내림차순. */
 function staleRows_(key, rows, todayYmd, tz) {
@@ -1097,8 +1112,9 @@ function staleRows_(key, rows, todayYmd, tz) {
     if (!day) return;                       // 요청일이 비면 경과일을 만들 수 없다 — 추정하지 않는다
     var d = daysBetween_(day, todayYmd);
     if (d == null || d < STALE_DAYS) return;
-    out.push({ name: r.name, mid: r.merchantId, group: r.client || r.fiMerchant || "",
-               status: st, since: day, days: d });
+    out.push({ key: key + ":" + (r.merchantId || r.name || ""),
+               name: r.name, mid: r.merchantId, group: r.client || r.fiMerchant || "",
+               status: st, since: day, days: d, step: escalationStep_(d, STALE_DAYS) });
   });
   return out.sort(function(a, b) { return b.days - a.days; });
 }
@@ -1106,23 +1122,38 @@ function staleRows_(key, rows, todayYmd, tz) {
 function sendStaleAlert() {
   var tz = Session.getScriptTimeZone();
   var todayYmd = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
-  var sections = [], total = 0, worst = 0;
+  var props = PropertiesService.getScriptProperties();
+  var raw = props.getProperty(STALE_SNAP_KEY);
+  var snap = {};
+  if (raw) { try { snap = JSON.parse(raw); } catch (e) {} }
+
+  var next = {}, sections = [], total = 0, worst = 0;
 
   ["KRW", "VND"].forEach(function(key) {
     var stale = staleRows_(key, readTab(MAP[key], {}), todayYmd, tz);
-    if (!stale.length) return;
-    total += stale.length;
-    if (stale[0].days > worst) worst = stale[0].days;
-    var lines = stale.map(function(x) {
+    var fresh = [];
+    stale.forEach(function(x) {
+      next[x.key] = x.step;                  // 아직 체류 중인 건은 단계를 이어서 기억한다
+      if (x.step > (snap[x.key] || 0)) fresh.push(x);
+    });
+    if (!fresh.length) return;
+    total += fresh.length;
+    if (fresh[0].days > worst) worst = fresh[0].days;
+    var lines = fresh.map(function(x) {
       return "• `" + x.days + "일` *" + x.name + "*" + (x.mid ? "  `" + x.mid + "`" : "") +
              "\n    " + x.status + (x.group ? " · " + x.group : "") + " · " + x.since + " 이후";
     });
     sections.push({ type: "section", text: { type: "mrkdwn",
-      text: "*[" + key + "] " + stale.length + "건*\n" + lines.join("\n") } });
+      text: "*[" + key + "] " + fresh.length + "건*\n" + lines.join("\n") } });
   });
 
-  Logger.log("sendStaleAlert: " + total + "건 (기준 " + STALE_DAYS + "일)");
-  if (!total) return;   // 걸린 게 없으면 아무 말도 하지 않는다 — 매일 "0건" 알림은 소음이다
+  // 스냅샷은 현재 체류 중인 건만 남긴다. 종결됐거나 시트에서 사라진 건은 자동으로 빠지고,
+  // 다시 같은 상태로 돌아오면 처음 단계부터 새로 알린다.
+  props.setProperty(STALE_SNAP_KEY, JSON.stringify(next));
+
+  Logger.log("sendStaleAlert: 새로 알릴 " + total + "건 / 체류 중 " +
+             Object.keys(next).length + "건 (기준 " + STALE_DAYS + "일)");
+  if (!total) return;   // 새로 단계를 넘은 게 없으면 조용히 넘어간다
 
   var blocks = [
     { type: "header", text: { type: "plain_text",
@@ -1130,7 +1161,7 @@ function sendStaleAlert() {
   ].concat(sections, [
     { type: "divider" },
     { type: "context", elements: [{ type: "mrkdwn",
-      text: "최장 " + worst + "일 · 기준 " + STALE_DAYS + "일 · " +
+      text: "체류 중 " + Object.keys(next).length + "건 · 최장 " + worst + "일 · " +
             ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
   ]);
   sendSlack_({ blocks: blocks });
