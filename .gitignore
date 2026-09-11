@@ -1,8 +1,0 @@
-# 아이콘 원본 — 앱이 참조하지 않고, 퍼블릭 레포에 둘 이유가 없다. 로컬에는 남긴다.
-log.png
-smos-alert-icon.png
-eedf0f2d-0f64-4629-8c71-015a41e06704.jpg
-
-# 로컬 검증용 파일
-.mock.js
-.claude/launch.json

@@ -149,6 +149,12 @@
     border:1px solid var(--border); padding:1px 6px; border-radius:4px; white-space:nowrap;}
 
   /* ---- 입금 분석 뷰 (집중도 · 추이) ---- */
+  .period{display:inline-flex; gap:4px;}
+  .period select{font:inherit; font-size:12.5px; font-weight:650; color:var(--ink-2);
+    background:var(--surface); border:1px solid var(--border); border-radius:8px;
+    padding:7px 8px; cursor:pointer; max-width:112px;}
+  .period select:disabled{color:var(--muted); cursor:default;}
+
   .view-nav{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border);
     border-radius:9px; padding:3px; margin:10px 0 0; overflow-x:auto; scrollbar-width:none;}
   .view-nav::-webkit-scrollbar{display:none;}
@@ -421,8 +427,11 @@
     </div>
     <div class="chips" id="chips"></div>
     <div class="toolbar">
+      <span class="period">
+        <select id="perYear" aria-label="연도"></select>
+        <select id="perMonth" aria-label="월"></select>
+      </span>
       <button id="btnSort">↕ 최근순</button>
-      <button id="btnExportCsv">⤓ CSV 내보내기</button>
     </div>
   </header>
   <!-- 자주 쓰지 않는 것들. 폰에서 프라임 공간을 쓸 이유가 없고, 언어 토글은 화면 밖으로 잘리고 있었다. -->
@@ -439,6 +448,7 @@
       </div>
     </div>
     <div class="mm-sep"></div>
+    <button class="mm-item" id="btnExportCsv">⤓ CSV 내보내기</button>
     <button class="mm-item" id="btnExportJson">JSON 백업</button>
     <button class="mm-item" id="btnWeeklyReport">📧 주간 보고</button>
     <div class="mm-sep"></div>
@@ -554,6 +564,10 @@ const STRINGS = {
     dvForecast:"Forecast",
     mmTheme:"테마",
     mmLang:"언어",
+    perAll:"전체 기간",
+    perAllMonths:"전체 월",
+    perMonthFmt:n=>`${n}월`,
+    trendYearOnly:"추이는 연도 기준",
     noOnboarding:"온보딩 기록 없음",
     noOnboardingNote:"입금은 있는데 온보딩 탭에 행이 없는 머천트입니다. 온보딩 탭이 2026-03부터라 그 전 건은 여기 잡힙니다.",
     concTop1:"상위 1곳",
@@ -671,6 +685,10 @@ const STRINGS = {
     dvForecast:"Forecast",
     mmTheme:"Theme",
     mmLang:"Language",
+    perAll:"All time",
+    perAllMonths:"All months",
+    perMonthFmt:n=>["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][n-1],
+    trendYearOnly:"trend is by year",
     noOnboarding:"No onboarding record",
     noOnboardingNote:"Merchants with deposits but no onboarding row. The onboarding tab starts at 2026-03, so anything earlier lands here.",
     concTop1:"Top 1",
@@ -866,7 +884,7 @@ function fmtMoneyFull(v,cur){
                      : "$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 /* 승인 완료인데 입금이 0인 건 — Sales 후속 대상 */
-const isNoDeposit = r => CORR().success.includes(r.status) && !(Number(r.depSum)||0);
+const isNoDeposit = r => CORR().success.includes(r.status) && !depOf(r).sum;
 
 /* 백엔드가 내려준 코리도별 입금 메타(_dep). 없으면 빈 값으로 동작해 구 백엔드와도 깨지지 않는다. */
 function DEP(){ return (Store.data && Store.data._dep && Store.data._dep[active]) || {}; }
@@ -877,12 +895,83 @@ function orphanRows(){
   const nf=nameField(), gf=groupField(), byMid=CORR().depJoin==="mid";
   return (DEP().orphans||[]).map(o=>{
     const r={ id:"orph-"+o.key, status:"", noOnboarding:true, client:o.client||"",
-      depSum:o.depSum, depCnt:o.depCnt, depLast:o.depLast, depVaType:o.depVaType||"" };
+      depSum:o.depSum, depCnt:o.depCnt, depLast:o.depLast, depM:o.depM||null, depVaType:o.depVaType||"" };
     if(byMid) r.merchantId=o.key;
     r[nf]=o.name; r[gf]=o.client||L("noGroup");
     return r;
   });
 }
+
+/* ---- 기간 필터 ----
+ * 원천에 2024년부터 들어와 전체 누적만 보여주면 "올해 얼마 들어왔나"를 알 수 없다.
+ * 머천트별 월 내역(depM)을 받아 화면에서 기간을 다시 계산한다. 백엔드 재호출이 없다.
+ * 경보는 이 필터와 무관하게 항상 최신 기준으로 판단한다 — 화면 상태가 알림을 바꾸면 안 된다. */
+let perYear = String(new Date().getFullYear());   // 디폴트: 올해
+let perMonth = "";                                 // "" = 전체 월
+
+/* 데이터에 실제로 존재하는 연도. 없는 연도를 고르게 하지 않는다. */
+function depYears(){
+  const set=new Set();
+  Store.rows().concat(orphanRows()).forEach(r=>{
+    Object.keys(r.depM||{}).forEach(mo=>set.add(mo.slice(0,4)));
+  });
+  (DEP().months||[]).forEach(m=>set.add(m.mo.slice(0,4)));
+  return [...set].sort().reverse();
+}
+function periodLabel(){
+  if(!perYear) return L("perAll");
+  return perMonth ? `${perYear}-${perMonth}` : `${perYear}`;
+}
+/* 선택 기간이 이 월을 포함하나 */
+function inPeriod(mo){
+  if(!perYear) return true;
+  if(mo.slice(0,4)!==perYear) return false;
+  return !perMonth || mo.slice(5,7)===perMonth;
+}
+
+/* 행의 기간 내 입금 — 금액·건수·기간 내 마지막 입금일. depM이 없으면 전체값으로 떨어진다
+   (구 백엔드 호환). */
+function depOf(r){
+  const m=r.depM;
+  if(!m) return { sum:Number(r.depSum)||0, cnt:Number(r.depCnt)||0, last:r.depLast||"" };
+  let sum=0, cnt=0, last="";
+  Object.keys(m).forEach(mo=>{
+    if(!inPeriod(mo)) return;
+    sum+=m[mo][0]; cnt+=m[mo][1];
+    if(m[mo][2]>last) last=m[mo][2];
+  });
+  return { sum:Math.round(sum*100)/100, cnt, last };
+}
+
+/* 기간 내 전체 입금액 — 점유율의 분모. 보드 행 + 고아를 조인 키로 접어 센다. */
+function depTotal(){
+  const seen=new Set(); let t=0;
+  Store.rows().concat(orphanRows()).forEach(r=>{
+    const k=depKeyOf(r)||r.id;
+    if(seen.has(k)) return;
+    seen.add(k);
+    t+=depOf(r).sum;
+  });
+  return t;
+}
+
+function renderPeriod(){
+  const years=depYears();
+  const ySel=$("#perYear"), mSel=$("#perMonth");
+  if(!years.length){ $(".period").style.display="none"; return; }
+  $(".period").style.display="";
+  if(perYear && years.indexOf(perYear)<0) perYear=years[0];   // 올해 데이터가 없으면 최신 연도로
+  ySel.innerHTML=[`<option value="">${L("perAll")}</option>`]
+    .concat(years.map(y=>`<option value="${y}"${y===perYear?" selected":""}>${y}</option>`)).join("");
+  mSel.disabled=!perYear;
+  mSel.innerHTML=[`<option value="">${L("perAllMonths")}</option>`]
+    .concat(Array.from({length:12},(_,i)=>{
+      const mm=String(i+1).padStart(2,"0");
+      return `<option value="${mm}"${mm===perMonth?" selected":""}>${L("perMonthFmt")(i+1)}</option>`;
+    })).join("");
+}
+$("#perYear").addEventListener("change",e=>{ perYear=e.target.value; if(!perYear) perMonth=""; render(); });
+$("#perMonth").addEventListener("change",e=>{ perMonth=e.target.value; render(); });
 
 /* 보드 행 → 입금 집계 키. 백엔드 normName_과 같은 규칙이어야 한다. */
 function depKeyOf(r){
@@ -892,7 +981,7 @@ function depKeyOf(r){
 
 /* 전체 입금액 대비 점유율. 분모는 백엔드 합계라 화면 필터에 흔들리지 않는다. */
 function depShare(v){
-  const t=Number(DEP().total)||0;
+  const t=depTotal();
   return t ? (Number(v)||0)/t*100 : 0;
 }
 
@@ -985,7 +1074,7 @@ function render(){
   $("#btnWeeklyReport").textContent = "📧 "+L("weeklyReport");
   $("#mmTheme").textContent = L("mmTheme");
   $("#mmLang").textContent = L("mmLang");
-  renderTabs(); updateSync(); renderViewNav();
+  renderTabs(); updateSync(); renderViewNav(); renderPeriod();
   if(forecastMode){ renderForecast(); return; }
   $("#forecastPanel").style.display="none";
   // 목록이 아닌 화면에서는 목록 도구(검색·칩·정렬)를 내린다. 대시보드도 검색을 쓰지 않는다.
@@ -1015,8 +1104,8 @@ function render(){
       return mb.localeCompare(ma);
     });
   } else if(sortMode==="deposit"){
-    const dsum=g=>groups[g].reduce((a,r)=>a+(Number(r.depSum)||0),0);
-    for(const g of names) groups[g].sort((a,b)=>(Number(b.depSum)||0)-(Number(a.depSum)||0));
+    const dsum=g=>groups[g].reduce((a,r)=>a+depOf(r).sum,0);
+    for(const g of names) groups[g].sort((a,b)=>depOf(b).sum-depOf(a).sum);
     names.sort((a,b)=>dsum(b)-dsum(a));
   }
 
@@ -1031,7 +1120,7 @@ function render(){
       const succ=gr.filter(r=>CORR().success.includes(r.status)).length;
       const pct=Math.round(succ/gr.length*100);
       const attnCnt=gr.filter(r=>isAttention(r)).length;
-      const gDep=gr.reduce((a,r)=>a+(Number(r.depSum)||0),0);
+      const gDep=gr.reduce((a,r)=>a+depOf(r).sum,0);
       const isOpen = forceOpen || openGroups.has(active+"|"+g);
       html+=`<div class="group ${isOpen?'open':''}" data-g="${esc(g)}">
         <div class="group-head" data-act="tg-group">
@@ -1062,9 +1151,11 @@ function orphanGroupHTML(){
     const q=query.toLowerCase(), nf=nameField();
     list=list.filter(r=>[nf,"merchantId","client"].some(f=>String(r[f]||"").toLowerCase().includes(q)));
   }
+  // 이 그룹은 "온보딩 탭에 없는 입금"을 드러내려고 있다. 선택 기간에 입금이 없으면 드러낼 게 없다.
+  list=list.filter(r=>depOf(r).sum>0);
   if(!list.length) return "";
-  list.sort((a,b)=>b.depSum-a.depSum);
-  const sum=list.reduce((a,r)=>a+r.depSum,0);
+  list.sort((a,b)=>depOf(b).sum-depOf(a).sum);
+  const sum=list.reduce((a,r)=>a+depOf(r).sum,0);
   const g=L("noOnboarding");
   const isOpen = !!query || openGroups.has(active+"|"+g);
   return `<div class="group ${isOpen?'open':''} g-noonb" data-g="${esc(g)}">
@@ -1091,13 +1182,14 @@ function itemHTML(r){
   const mid=r.merchantId;
   const attn=isAttention(r);
   const attnCls=attn==="high"?"attn-high":"";
-  const dep=Number(r.depSum)||0;
+  const dp=depOf(r);
+  const dep=dp.sum;
   const noDep=isNoDeposit(r);
   const sh = dep ? depShare(dep) : 0;
   const depBadge = dep
     ? `<div class="dep-badge"><span class="dep-amt">${fmtMoney(dep)}</span>${
          sh>=0.05?`<span class="dep-share">${sh.toFixed(1)}%</span>`:""}${
-         r.depCnt?`<span class="dep-meta">${r.depCnt}${lang==="EN"?"":"건"}${r.depLast?" · "+esc(r.depLast.slice(5).replace("-","/")):""}</span>`:""}</div>`
+         dp.cnt?`<span class="dep-meta">${dp.cnt}${lang==="EN"?"":"건"}${dp.last?" · "+esc(dp.last.slice(5).replace("-","/")):""}</span>`:""}</div>`
     : noDep ? `<div class="dep-badge none"><span class="dep-amt">${L("noDeposit")}</span></div>` : "";
   return `<div class="item ${isOpen?'open':''} ${attnCls} ${noDep?'no-dep':''}" data-id="${esc(r.id)}">
     <div class="item-row" data-act="tg-item">
@@ -1124,7 +1216,8 @@ function itemHTML(r){
 }
 
 function depDetail(r){
-  const dep=Number(r.depSum)||0;
+  const dp=depOf(r);
+  const dep=dp.sum;
   if(!dep){
     if(!isNoDeposit(r)) return "";
     return `<div class="d-item"><span class="d-key">${L("depTotal")}</span>
@@ -1133,10 +1226,10 @@ function depDetail(r){
   const sh=depShare(dep);
   let h=`<div class="d-item"><span class="d-key">${L("depTotal")}</span>
     <span class="d-val mono">${fmtMoneyFull(dep)}${sh>=0.05?` <span class="dep-share">${sh.toFixed(2)}%</span>`:""}</span></div>`;
-  if(r.depCnt) h+=`<div class="d-item"><span class="d-key">${L("depCount")}</span>
-    <span class="d-val mono">${r.depCnt}${lang==="EN"?"":"건"}</span></div>`;
-  if(r.depLast) h+=`<div class="d-item"><span class="d-key">${L("depLast")}</span>
-    <span class="d-val mono">${esc(r.depLast)}</span></div>`;
+  if(dp.cnt) h+=`<div class="d-item"><span class="d-key">${L("depCount")}</span>
+    <span class="d-val mono">${dp.cnt}${lang==="EN"?"":"건"}</span></div>`;
+  if(dp.last) h+=`<div class="d-item"><span class="d-key">${L("depLast")}</span>
+    <span class="d-val mono">${esc(dp.last)}</span></div>`;
   if(r.depVaType) h+=`<div class="d-item"><span class="d-key">${L("depVaType")}</span>
     <span class="d-val">${esc(r.depVaType)}</span></div>`;
   return h;
@@ -1159,35 +1252,36 @@ function detailRow(r,c){
 
 /* ---- 집중도: 어느 머천트가 볼륨을 만드는가 ---- */
 function concHTML(){
-  const meta=DEP(), total=Number(meta.total)||0;
+  const meta=DEP(), total=depTotal();
   // 같은 입금 키가 보드에 두 행으로 있으면(예: MID 중복 입력) 같은 돈이 두 번 세어져
   // 점유율 합이 100%를 넘는다. 키 단위로 접어서 센다.
   const seen=new Set();
   const all=Store.rows().concat(orphanRows())
-    .filter(r=>(Number(r.depSum)||0)>0)
+    .map(r=>Object.assign({}, r, { _dep:depOf(r).sum }))
+    .filter(r=>r._dep>0)
     .filter(r=>{ const k=depKeyOf(r)||r.id; if(seen.has(k)) return false; seen.add(k); return true; })
-    .sort((a,b)=>b.depSum-a.depSum);
+    .sort((a,b)=>b._dep-a._dep);
   if(!all.length) return `<div class="dp-card"><p class="dp-note">${L("depEmpty")}</p></div>`;
   const nf=nameField();
   const pct=v=>total?v/total*100:0;
 
   // 누적 80%에 몇 곳이 필요한가
   let cum=0, need80=0;
-  for(const r of all){ cum+=pct(r.depSum); need80++; if(cum>=80) break; }
+  for(const r of all){ cum+=pct(r._dep); need80++; if(cum>=80) break; }
 
   const top5=all.slice(0,5);
-  const restPct=Math.max(0, 100-top5.reduce((a,r)=>a+pct(r.depSum),0));
-  const stack=top5.map((r,i)=>`<i style="width:${pct(r.depSum).toFixed(2)}%;background:var(--rk${i+1})" title="${esc(r[nf])} ${pct(r.depSum).toFixed(1)}%"></i>`).join("")
+  const restPct=Math.max(0, 100-top5.reduce((a,r)=>a+pct(r._dep),0));
+  const stack=top5.map((r,i)=>`<i style="width:${pct(r._dep).toFixed(2)}%;background:var(--rk${i+1})" title="${esc(r[nf])} ${pct(r._dep).toFixed(1)}%"></i>`).join("")
     +(restPct>0?`<i style="width:${restPct.toFixed(2)}%;background:var(--rk-rest)" title="${LF("concRest",all.length-top5.length)} ${restPct.toFixed(1)}%"></i>`:"");
   const leg=top5.map((r,i)=>`<div class="dp-li"><i style="background:var(--rk${i+1})"></i>
       <span class="nm">${esc(r[nf])||L("noName")}${r.merchantId?`<em>${esc(r.merchantId)}</em>`:""}</span>
-      <span class="sh">${pct(r.depSum).toFixed(2)}%</span></div>`).join("")
+      <span class="sh">${pct(r._dep).toFixed(2)}%</span></div>`).join("")
     +(all.length>5?`<div class="dp-li"><i style="background:var(--rk-rest)"></i>
       <span class="nm">${LF("concRest",all.length-5)}</span><span class="sh">${restPct.toFixed(2)}%</span></div>`:"");
 
   // 클라이언트별
   const gf=groupField(), byC={};
-  all.forEach(r=>{ const c=r[gf]||L("noGroup"); (byC[c]=byC[c]||{s:0,n:0}).s+=Number(r.depSum)||0; byC[c].n++; });
+  all.forEach(r=>{ const c=r[gf]||L("noGroup"); (byC[c]=byC[c]||{s:0,n:0}).s+=r._dep; byC[c].n++; });
   const cl=Object.keys(byC).map(c=>[c,byC[c].s,byC[c].n]).sort((a,b)=>b[1]-a[1]);
   const clHTML=cl.map(([c,s,n],i)=>`<div class="dp-li"><i style="background:var(--rk${Math.min(i+1,5)})"></i>
       <span class="nm">${esc(c)}<em>${n}${lang==="EN"?"":"곳"}</em></span>
@@ -1196,14 +1290,14 @@ function concHTML(){
   // 상위 테이블. 행을 누르면 머천트 목록에서 그 머천트만 펼쳐 보여준다(티켓·상태 확인용).
   const rows=all.slice(0,15);
   let c2=0;
-  const tr=rows.map((r,i)=>{ c2+=pct(r.depSum);
+  const tr=rows.map((r,i)=>{ c2+=pct(r._dep);
     return `<tr class="go ${i===need80-1?"mark":""}" data-act="goto-merchant" data-id="${esc(r.id)}"
         data-q="${esc(r.merchantId||r[nf]||"")}" title="${esc(r[nf])}">
       <td class="n">${i+1}</td>
       <td class="nm">${esc(r[nf])||L("noName")}</td>
       <td class="fi">${esc(r[gf]||L("noGroup"))}</td>
-      <td class="n">${fmtMoney(r.depSum)}</td>
-      <td class="n">${pct(r.depSum).toFixed(2)}%</td>
+      <td class="n">${fmtMoney(r._dep)}</td>
+      <td class="n">${pct(r._dep).toFixed(2)}%</td>
       <td class="n">${c2.toFixed(1)}%</td></tr>`; }).join("");
 
   // 승인 곳수도 같은 키 기준으로 센다. 위의 "머천트 N곳"과 한 문장에 나오므로 기준이 달라선 안 된다.
@@ -1212,19 +1306,19 @@ function concHTML(){
     if(!CORR().success.includes(r.status)) return;
     const k=depKeyOf(r)||r.id;
     apprKeys.add(k);
-    if((Number(r.depSum)||0)>0) depKeys.add(k);
+    if(depOf(r).sum>0) depKeys.add(k);
   });
   const appr=apprKeys.size, withDep=depKeys.size;
 
   return `
   <div class="dp-kpis">
-    <div class="dp-kpi"><dt>${L("concTop1")}</dt><dd>${pct(all[0].depSum).toFixed(1)}<small>%</small></dd></div>
-    <div class="dp-kpi"><dt>${L("concTop5")}</dt><dd>${top5.reduce((a,r)=>a+pct(r.depSum),0).toFixed(1)}<small>%</small></dd></div>
+    <div class="dp-kpi"><dt>${L("concTop1")}</dt><dd>${pct(all[0]._dep).toFixed(1)}<small>%</small></dd></div>
+    <div class="dp-kpi"><dt>${L("concTop5")}</dt><dd>${top5.reduce((a,r)=>a+pct(r._dep),0).toFixed(1)}<small>%</small></dd></div>
     <div class="dp-kpi"><dt>${L("concNeed80")}</dt><dd>${need80}<small>${lang==="EN"?"":"곳"}</small></dd></div>
   </div>
   <div class="dp-card">
     <div class="dp-head"><span class="dp-title">${L("concShare")}</span>
-      <span class="dp-aside">${fmtMoney(total)}</span></div>
+      <span class="dp-aside">${esc(periodLabel())} · ${fmtMoney(total)}</span></div>
     <div class="dp-stack">${stack}</div>
     <div class="dp-leg">${leg}</div>
     <p class="dp-note">${LF("concHead",all.length,need80)}
@@ -1250,7 +1344,9 @@ function concHTML(){
 
 /* ---- 추이: 월별 입금액·머천트 수 ---- */
 function trendHTML(){
-  const meta=DEP(), ms=meta.months||[];
+  const meta=DEP();
+  // 추이는 연도만 따른다. 한 달로 좁히면 막대가 하나 남아 추이가 아니게 된다.
+  const ms=(meta.months||[]).filter(m=>!perYear || m.mo.slice(0,4)===perYear);
   if(!ms.length) return `<div class="dp-card"><p class="dp-note">${L("depEmpty")}</p></div>`;
   const hasAlt=(Number(meta.alt&&meta.alt.total)||0)>0;
   const hasUna=ms.some(m=>m.u>0);
@@ -1298,7 +1394,8 @@ function trendHTML(){
 
   return `
   <div class="dp-card">
-    <div class="dp-head"><span class="dp-title">${L("trendAmount")}</span>${toggle}</div>
+    <div class="dp-head"><span class="dp-title">${L("trendAmount")}</span>
+      <span class="dp-aside">${esc(periodLabel())}${perMonth?" · "+L("trendYearOnly"):""}</span>${toggle}</div>
     ${bars}
     <div class="dp-inline">${legend}</div>
     ${notes.length?`<p class="dp-note">${notes.join("<br>")}</p>`:""}
@@ -1777,7 +1874,11 @@ function toCSV(){
     return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
   };
   const lines=[all.map(c=>q(c.header)).join(",")];
-  Store.rows().forEach(r=>lines.push(all.map(c=>q(r[c.field])).join(",")));
+  Store.rows().forEach(r=>{
+    const dp=depOf(r);
+    const v={depSum:dp.sum, depCnt:dp.cnt, depLast:dp.last};
+    lines.push(all.map(c=>q(c.field in v ? v[c.field] : r[c.field])).join(","));
+  });
   return lines.join("\r\n");
 }
 function download(name,content,type){ const b=new Blob([content],{type}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; a.click(); URL.revokeObjectURL(a.href); }

@@ -292,10 +292,19 @@ function readDeposits_(key) {
     diag.keptSum += amt;
 
     var o = out[k];
-    if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [], name: "", client: "" };
+    if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [], name: "", client: "", m: {} };
     o.sum += amt;
     o.n++;
     if (d && d > o.last) o.last = d;
+    // 머천트별 월 내역. 세일즈가 연·월로 걸러 보므로 프론트가 기간을 다시 계산할 수 있어야 한다.
+    // [금액, 건수, 그 달의 마지막 입금일] — 배열로 두면 페이로드가 키 이름만큼 가벼워진다.
+    if (mo) {
+      var mm = o.m[mo];
+      if (!mm) mm = o.m[mo] = [0, 0, ""];
+      mm[0] += amt;
+      mm[1]++;
+      if (d && d > mm[2]) mm[2] = d;
+    }
     // 표시용 이름/클라이언트. 보드에 없는 머천트를 목록에 얹을 때 쓴다.
     if (!o.name && cfg.nameCol != null) o.name = String(row[cfg.nameCol]).trim();
     if (!o.client && cfg.clientCol != null) o.client = depClient_(cfg, row);
@@ -306,6 +315,10 @@ function readDeposits_(key) {
     bump_(cur, mo, k, amt);
     if (mo && (!first[k] || mo < first[k])) first[k] = mo;
   }
+  Object.keys(out).forEach(function(k) {
+    var mm = out[k].m;
+    Object.keys(mm).forEach(function(mo) { mm[mo][0] = Math.round(mm[mo][0] * 100) / 100; });
+  });
   if (skipped.n) out._skipped = skipped;
   out._diag = diag;
   out._meta = depMeta_(cfg, out, cur, alt, una, first);
@@ -401,6 +414,7 @@ function attachDeposits_(key, rows) {
     r.depSum = d ? Math.round(d.sum * 100) / 100 : 0;
     r.depCnt = d ? d.n : 0;
     r.depLast = d ? d.last : "";
+    if (d && d.m) r.depM = d.m;        // 기간 필터용 월 내역
     if (d && d.va && d.va.length) r.depVaType = d.va.join(" / ");
   });
   return rows;
@@ -429,6 +443,7 @@ function depBoardMeta_(key, rows) {
       depSum: Math.round(o.sum * 100) / 100,
       depCnt: o.n,
       depLast: o.last,
+      depM: o.m || {},
       depVaType: o.va && o.va.length ? o.va.join(" / ") : "",
       noOnboarding: true
     });
