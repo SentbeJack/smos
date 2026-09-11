@@ -242,9 +242,7 @@ function readDeposits_(key) {
     var d = diag.drop[why] || (diag.drop[why] = { n: 0, sum: 0, sample: "" });
     d.n++;
     d.sum += amt || 0;
-    if (!d.sample && v !== undefined) {
-      d.sample = "(" + (typeof v) + ") " + JSON.stringify(String(v)).slice(0, 34);
-    }
+    if (!d.sample && v !== undefined) d.sample = depSample_(v);
   };
 
   for (var r = cfg.skip; r < vals.length; r++) {
@@ -302,6 +300,18 @@ function readDeposits_(key) {
   out._meta = depMeta_(cfg, out, cur, alt, una, first);
   try { cache.put(ck, JSON.stringify(out), 300); } catch (e) { /* 6MB 초과 시 캐시 생략 */ }
   return out;
+}
+
+/* 탈락 샘플 문자열. 계좌번호처럼 긴 숫자는 값을 남기지 않는다 —
+ * 진단에 필요한 건 타입과 자릿수뿐이고, 이 문자열은 실행 로그와 스크립트 캐시에 남는다. */
+function depSample_(v) {
+  var s = String(v);
+  var digits = s.replace(/\D/g, "");
+  if (digits.length >= 6) {
+    return "(" + (typeof v) + ") 숫자 " + digits.length + "자리" +
+           (digits.length === s.trim().length ? "" : " (+기타문자)");
+  }
+  return "(" + (typeof v) + ") " + JSON.stringify(s).slice(0, 34);
 }
 
 /* 입금 원천의 클라이언트 라벨을 보드의 그룹 라벨과 같은 체계로 맞춘다. */

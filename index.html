@@ -1055,9 +1055,9 @@ function itemHTML(r){
   const depBadge = dep
     ? `<div class="dep-badge"><span class="dep-amt">${fmtMoney(dep)}</span>${
          sh>=0.05?`<span class="dep-share">${sh.toFixed(1)}%</span>`:""}${
-         r.depCnt?`<span class="dep-meta">${r.depCnt}${lang==="EN"?"":"건"}${r.depLast?" · "+r.depLast.slice(5).replace("-","/"):""}</span>`:""}</div>`
+         r.depCnt?`<span class="dep-meta">${r.depCnt}${lang==="EN"?"":"건"}${r.depLast?" · "+esc(r.depLast.slice(5).replace("-","/")):""}</span>`:""}</div>`
     : noDep ? `<div class="dep-badge none"><span class="dep-amt">${L("noDeposit")}</span></div>` : "";
-  return `<div class="item ${isOpen?'open':''} ${attnCls} ${noDep?'no-dep':''}" data-id="${r.id}">
+  return `<div class="item ${isOpen?'open':''} ${attnCls} ${noDep?'no-dep':''}" data-id="${esc(r.id)}">
     <div class="item-row" data-act="tg-item">
       <div class="item-main">
         <div class="item-name">${esc(r[nameField()])||`<span style="color:var(--muted)">${L("noName")}</span>`}</div>
@@ -1076,7 +1076,7 @@ function itemHTML(r){
     <div class="detail"><div class="detail-inner">
       ${depDetail(r)}
       ${r.noOnboarding?"":CORR().columns.filter(c=>!c.role || c.role==="status").map(c=>detailRow(r,c)).filter(Boolean).join("")}
-      <button class="share-btn" data-act="copy-summary" data-id="${r.id}">${L("shareLabel")}</button>
+      <button class="share-btn" data-act="copy-summary" data-id="${esc(r.id)}">${L("shareLabel")}</button>
     </div></div>
   </div>`;
 }
@@ -1228,17 +1228,17 @@ function trendHTML(){
   const rowTotal=m=>amt(m)+(hasAlt?m.a:0)+m.u;
   const mx=Math.max(1,...ms.map(rowTotal));
   const seg=(v,c)=>v>0?`<i style="width:${(v/mx*100).toFixed(2)}%;background:var(${c})" title="${fmtMoney(v)}"></i>`:"";
-  const bars=ms.map(m=>`<div class="dp-bar"><span class="mo">${m.mo.slice(2)}</span>
+  const bars=ms.map(m=>`<div class="dp-bar"><span class="mo">${esc(m.mo.slice(2))}</span>
       <span class="tk">${seg(amt(m),"--accent")}${hasAlt?seg(m.a,"--muted"):""}${seg(m.u,"--s-vaw-d")}</span>
       <span class="v">${rowTotal(m)?fmtMoney(rowTotal(m)):"—"}</span></div>`).join("");
 
   const mmx=Math.max(1,...ms.map(m=>m.m));
-  const mbars=ms.map(m=>`<div class="dp-bar"><span class="mo">${m.mo.slice(2)}</span>
+  const mbars=ms.map(m=>`<div class="dp-bar"><span class="mo">${esc(m.mo.slice(2))}</span>
       <span class="tk">${m.m-m.nw>0?`<i style="width:${((m.m-m.nw)/mmx*100).toFixed(2)}%;background:var(--accent)"></i>`:""}${
         m.nw>0?`<i style="width:${(m.nw/mmx*100).toFixed(2)}%;background:var(--s-live-d)"></i>`:""}</span>
       <span class="v">${m.m||"—"}${m.nw?` <span style="color:var(--s-live-d)">+${m.nw}</span>`:""}</span></div>`).join("");
 
-  const tr=ms.map(m=>`<tr><td>${m.mo}</td>
+  const tr=ms.map(m=>`<tr><td>${esc(m.mo)}</td>
       <td class="n">${m.sum?fmtMoney(m.sum):"—"}</td>
       ${hasAlt?`<td class="n">${m.a?fmtMoney(m.a):"—"}</td>`:`<td class="n">${m.w?fmtMoney(m.w):"—"}</td>`}
       <td class="n">${m.n||"—"}</td><td class="n">${m.m||"—"}</td><td class="n">${m.nw||"—"}</td></tr>`).join("");
@@ -1330,7 +1330,7 @@ $("#depPanel").addEventListener("click",e=>{
   $("#search").value=query;
   openItems.add(active+"|"+go.dataset.id);
   render();
-  const el=document.querySelector('.item[data-id="'+go.dataset.id+'"]');
+  const el=[...document.querySelectorAll(".item")].find(x=>x.dataset.id===go.dataset.id);
   if(el){
     // 헤더가 sticky라 그냥 스크롤하면 머천트 이름이 헤더 밑으로 들어간다.
     const hh=$("header")?$("header").getBoundingClientRect().height:0;
@@ -1718,7 +1718,13 @@ function toCSV(){
              {field:"depCnt",header:"Deposit Count"},
              {field:"depLast",header:"Last Deposit"}];
   const all=cols.concat(dep);
-  const q=v=>{ v=String(v??""); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  // Excel·Sheets는 = + - @ 또는 제어문자로 시작하는 셀을 수식으로 실행한다. 머천트명·메모는
+  // 시트와 입금 원천에서 오는 값이라, 내보낸 CSV를 누가 열면 그대로 돌아간다. 숫자는 건드리지 않는다.
+  const q=v=>{
+    v=String(v??"");
+    if(/^[=+\-@\t\r]/.test(v) && !/^-?[\d,]+(\.\d+)?$/.test(v)) v="'"+v;
+    return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+  };
   const lines=[all.map(c=>q(c.header)).join(",")];
   Store.rows().forEach(r=>lines.push(all.map(c=>q(r[c.field])).join(",")));
   return lines.join("\r\n");
