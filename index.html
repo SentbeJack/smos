@@ -149,11 +149,31 @@
     border:1px solid var(--border); padding:1px 6px; border-radius:4px; white-space:nowrap;}
 
   /* ---- 입금 분석 뷰 (집중도 · 추이) ---- */
-  .dep-seg{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border);
-    border-radius:9px; padding:3px; margin:0 0 10px;}
-  .dep-seg button{flex:1; font:inherit; font-size:12.5px; font-weight:650; color:var(--muted);
-    background:none; border:0; padding:7px 4px; border-radius:6px; cursor:pointer;}
-  .dep-seg button.on{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.08);}
+  .view-nav{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border);
+    border-radius:9px; padding:3px; margin:10px 0 0; overflow-x:auto; scrollbar-width:none;}
+  .view-nav::-webkit-scrollbar{display:none;}
+  .view-nav button{flex:1 0 auto; font:inherit; font-size:12.5px; font-weight:650; color:var(--muted);
+    background:none; border:0; padding:8px 11px; border-radius:6px; cursor:pointer; white-space:nowrap;}
+  .view-nav button.on{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.08);}
+
+  /* 더보기 메뉴 — 테마·언어·백업·주간보고·로그아웃 */
+  .brand-r{flex:none; display:flex; align-items:center;}
+  .more-btn{font:inherit; font-size:20px; line-height:1; font-weight:700; color:var(--ink-2);
+    background:var(--surface); border:1px solid var(--border); width:36px; height:36px;
+    border-radius:9px; cursor:pointer; padding:0;}
+  .more-btn[aria-expanded="true"]{background:var(--accent-tint); border-color:var(--border-strong); color:var(--accent-2);}
+  .more-menu{position:fixed; top:58px; right:12px; z-index:60; width:222px;
+    background:var(--surface); border:1px solid var(--border-strong); border-radius:12px;
+    box-shadow:var(--shadow-lg); padding:8px; display:flex; flex-direction:column; gap:3px;}
+  /* display를 클래스로 주면 hidden 속성(UA 스타일)을 덮어써서 처음부터 열려 보인다. */
+  .more-menu[hidden]{display:none;}
+  .mm-row{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:4px 7px;}
+  .mm-lbl{font-size:12.5px; font-weight:600; color:var(--ink-2);}
+  .mm-sep{height:1px; background:var(--border); margin:4px 0;}
+  .mm-item{font:inherit; font-size:13px; font-weight:600; color:var(--ink-2); text-align:left;
+    background:none; border:0; padding:8px 8px; border-radius:7px; cursor:pointer;}
+  .mm-item:hover{background:var(--surface-2); color:var(--ink);}
+  .more-menu .user-pill{margin:2px 4px;}
   .dp{display:flex; flex-direction:column; gap:12px;}
   .dp-card{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:13px;}
   .dp-head{display:flex; align-items:baseline; gap:8px; margin-bottom:11px;}
@@ -238,6 +258,10 @@
   @media (max-width:480px){
     header{padding-top:calc(env(safe-area-inset-top) + 11px);}
     .brand-title{font-size:18px;}
+    /* 375px에서 제목이 두 줄로 줄바꿈되며 헤더를 70px까지 밀어 올렸다.
+       왼쪽 SMOS 마크가 이미 앱 이름을 말하므로 긴 제목은 감춘다. */
+    #titleText{display:none;}
+    .brand-sub{font-size:10.5px;}
     .tabs{margin-top:11px;}
     .tabs button{padding:11px 8px; font-size:14px;}
     .search{margin-top:10px;}
@@ -383,36 +407,45 @@
         <div class="brand-title"><span class="brand-mark">SMOS</span><span id="titleText">Sub Merchant Onboarding Status</span></div>
         <div class="brand-sub sync" id="syncWrap"><span class="sdot"></span><span id="syncPill">샘플 데이터 · 미연동</span></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div class="user-pill" id="userPill" style="display:none;" title="로그아웃">
-          <img id="userAvatar" src="" alt=""><span id="userName"></span>
-        </div>
-        <button class="theme-toggle" id="themeToggle" title="테마 전환"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
-        <div class="lang-toggle" id="langToggle">
-          <button data-lang="KR" class="on">한국어</button>
-          <button data-lang="EN">EN</button>
-        </div>
+      <div class="brand-r">
+        <button class="more-btn" id="moreBtn" aria-haspopup="true" aria-expanded="false" title="더보기">⋯</button>
       </div>
     </div>
-    <div class="view-toggle" id="viewToggle">
-      <button data-view="status" class="on">Status</button>
-      <button data-view="forecast">Forecast</button>
-    </div>
+    <!-- 뷰 전환을 한 줄로 합쳤다. Status/Forecast 밴드 + 대시보드 버튼 + 분석 탭이
+         서로 다른 세 곳에 흩어져 있어 모바일 헤더가 화면의 절반을 먹었다. -->
+    <div class="view-nav" id="viewNav"></div>
     <div class="tabs" id="tabs"></div>
-    <div class="dep-seg" id="depSeg"></div>
     <div class="search">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
       <input id="search" type="text" placeholder="상점명 · 고객명 · MID 검색" autocomplete="off">
     </div>
     <div class="chips" id="chips"></div>
     <div class="toolbar">
-      <button id="btnDashboard">📊 대시보드</button>
       <button id="btnSort">↕ 최근순</button>
       <button id="btnExportCsv">⤓ CSV 내보내기</button>
-      <button id="btnExportJson">JSON 백업</button>
-      <button id="btnWeeklyReport">📧 주간 보고</button>
     </div>
   </header>
+  <!-- 자주 쓰지 않는 것들. 폰에서 프라임 공간을 쓸 이유가 없고, 언어 토글은 화면 밖으로 잘리고 있었다. -->
+  <div class="more-menu" id="moreMenu" hidden>
+    <div class="mm-row">
+      <span class="mm-lbl" id="mmTheme">테마</span>
+      <button class="theme-toggle" id="themeToggle" title="테마 전환"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="mm-row">
+      <span class="mm-lbl" id="mmLang">언어</span>
+      <div class="lang-toggle" id="langToggle">
+        <button data-lang="KR" class="on">한국어</button>
+        <button data-lang="EN">EN</button>
+      </div>
+    </div>
+    <div class="mm-sep"></div>
+    <button class="mm-item" id="btnExportJson">JSON 백업</button>
+    <button class="mm-item" id="btnWeeklyReport">📧 주간 보고</button>
+    <div class="mm-sep"></div>
+    <div class="user-pill" id="userPill" style="display:none;" title="로그아웃">
+      <img id="userAvatar" src="" alt=""><span id="userName"></span>
+    </div>
+  </div>
   <main id="list"></main>
   <div class="dp" id="depPanel" style="display:none"></div>
   <div class="dash" id="dashboard" style="display:none"></div>
@@ -517,6 +550,10 @@ const STRINGS = {
     dvList:"Merchants",
     dvConc:"Concentration",
     dvTrend:"Trend",
+    dvDash:"Dashboard",
+    dvForecast:"Forecast",
+    mmTheme:"테마",
+    mmLang:"언어",
     noOnboarding:"온보딩 기록 없음",
     noOnboardingNote:"입금은 있는데 온보딩 탭에 행이 없는 머천트입니다. 온보딩 탭이 2026-03부터라 그 전 건은 여기 잡힙니다.",
     concTop1:"상위 1곳",
@@ -630,6 +667,10 @@ const STRINGS = {
     dvList:"Merchants",
     dvConc:"Concentration",
     dvTrend:"Trend",
+    dvDash:"Dashboard",
+    dvForecast:"Forecast",
+    mmTheme:"Theme",
+    mmLang:"Language",
     noOnboarding:"No onboarding record",
     noOnboardingNote:"Merchants with deposits but no onboarding row. The onboarding tab starts at 2026-03, so anything earlier lands here.",
     concTop1:"Top 1",
@@ -942,18 +983,19 @@ function render(){
   $("#btnExportCsv").textContent = L("btnExportCsv");
   $("#btnExportJson").textContent = L("btnExportJson");
   $("#btnWeeklyReport").textContent = "📧 "+L("weeklyReport");
-  const db=$("#btnDashboard"); db.textContent="📊 "+L("dashboard"); db.classList.toggle("dash-on",dashMode);
-  renderTabs(); updateSync();
+  $("#mmTheme").textContent = L("mmTheme");
+  $("#mmLang").textContent = L("mmLang");
+  renderTabs(); updateSync(); renderViewNav();
   if(forecastMode){ renderForecast(); return; }
   $("#forecastPanel").style.display="none";
-  renderDepSeg();
-  // 집중도·추이는 목록 도구(검색·칩·정렬)가 걸리지 않는 별도 화면이다.
-  const analytic = depView!=="list" && !dashMode;
-  $(".search").style.display=analytic?"none":"";
-  $("#chips").style.display=analytic?"none":"";
-  $(".toolbar").style.display=analytic?"none":"";
+  // 목록이 아닌 화면에서는 목록 도구(검색·칩·정렬)를 내린다. 대시보드도 검색을 쓰지 않는다.
+  const noTools = dashMode || depView!=="list";
+  const analytic = !dashMode && depView!=="list";   // depPanel을 띄울 화면
+  $(".search").style.display=noTools?"none":"";
+  $("#chips").style.display=noTools?"none":"";
+  $(".toolbar").style.display=noTools?"none":"";
   $("#depPanel").style.display=analytic?"":"none";
-  $("#list").style.display=(dashMode||analytic)?"none":"";
+  $("#list").style.display=noTools?"none":"";
   $("#dashboard").style.display=dashMode?"":"none";
   if(analytic){ $("#depPanel").innerHTML = depView==="conc"?concHTML():trendHTML(); return; }
   renderChips();
@@ -1113,15 +1155,6 @@ function detailRow(r,c){
   else if(c.field==="va") val=`<span class="va-copy" data-act="copy-va" data-va="${esc(v)}"><span>${esc(v)}</span><svg class="copy-ic" width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 11V3.5a1.5 1.5 0 011.5-1.5H11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></span>`;
   else val=`<span class="${c.mono?'mono':''}">${esc(v)}</span>`;
   return `<div class="d-item"><span class="d-key">${lbl}</span><span class="d-val ${c.mono&&c.type!=='url'?'mono':''}">${val}</span></div>`;
-}
-
-function renderDepSeg(){
-  const seg=$("#depSeg");
-  // 입금 데이터가 없는 백엔드/코리도에서는 토글 자체를 감춘다.
-  if(!(Number(DEP().total)||0)){ seg.style.display="none"; depView="list"; return; }
-  seg.style.display="";
-  seg.innerHTML=[["list","dvList"],["conc","dvConc"],["trend","dvTrend"]]
-    .map(([v,k])=>`<button data-dv="${v}" class="${depView===v?"on":""}">${L(k)}</button>`).join("");
 }
 
 /* ---- 집중도: 어느 머천트가 볼륨을 만드는가 ---- */
@@ -1318,7 +1351,53 @@ $("#langToggle").addEventListener("click",e=>{ const b=e.target.closest("button"
 $("#tabs").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; active=b.dataset.tab; filter="all"; query=""; $("#search").value=""; render(); if(dashMode) renderDash(); });
 $("#search").addEventListener("input",e=>{ query=e.target.value.trim(); render(); });
 $("#chips").addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b)return; filter=b.dataset.filter; render(); });
-$("#depSeg").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return; depView=b.dataset.dv; dashMode=false; render(); window.scrollTo(0,0); });
+/* 뷰 전환 한 곳. Status/Forecast 밴드 + 대시보드 버튼 + 분석 탭이 세 군데 흩어져 있던 것을 합쳤다.
+   Concentration·Trend는 입금 데이터가 없으면 항목 자체를 내린다. */
+function navItems(){
+  const hasDep = (Number(DEP().total)||0) > 0;
+  const items = [["list", L("dvList")]];
+  if(hasDep) items.push(["conc", L("dvConc")], ["trend", L("dvTrend")]);
+  items.push(["dash", L("dvDash")], ["forecast", L("dvForecast")]);
+  return items;
+}
+function currentNav(){
+  if(forecastMode) return "forecast";
+  if(dashMode) return "dash";
+  return depView;
+}
+function renderViewNav(){
+  const cur = currentNav();
+  $("#viewNav").innerHTML = navItems()
+    .map(([v,label])=>`<button data-nav="${v}" class="${cur===v?"on":""}">${esc(label)}</button>`).join("");
+}
+function gotoView(v){
+  forecastMode = v==="forecast";
+  dashMode     = v==="dash";
+  depView      = (v==="conc"||v==="trend") ? v : "list";
+  if(forecastMode){ renderForecast(); renderViewNav(); }
+  else render();
+  window.scrollTo(0,0);
+}
+$("#viewNav").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  gotoView(b.dataset.nav);
+});
+
+/* 더보기 메뉴 */
+function setMore(open){
+  $("#moreMenu").hidden = !open;
+  $("#moreBtn").setAttribute("aria-expanded", open?"true":"false");
+}
+$("#moreBtn").addEventListener("click",e=>{
+  e.stopPropagation();
+  setMore($("#moreMenu").hidden);
+});
+document.addEventListener("click",e=>{
+  if($("#moreMenu").hidden) return;
+  if(e.target.closest("#moreMenu") || e.target.closest("#moreBtn")) return;
+  setMore(false);
+});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") setMore(false); });
 $("#depPanel").addEventListener("click",e=>{
   const tm=e.target.closest("[data-tm]");
   if(tm){ trendExTop=tm.dataset.tm==="ex"; render(); return; }
@@ -1374,14 +1453,6 @@ $("#themeToggle").addEventListener("click",()=>{
 })();
 
 /* ============================ Dashboard ============================ */
-$("#btnDashboard").addEventListener("click",()=>{
-  dashMode=!dashMode;
-  if(dashMode) depView="list";
-  $("#list").style.display=dashMode?"none":"";
-  $("#dashboard").style.display=dashMode?"":"none";
-  $("#btnDashboard").classList.toggle("dash-on",dashMode);
-  if(dashMode) renderDash(); else render();
-});
 
 function isoWeekStart(d){
   const dt=new Date(d); const day=dt.getDay();
@@ -1548,26 +1619,7 @@ function renderWeeklyChart(data){
 }
 
 /* ============================ Forecast ============================ */
-$("#viewToggle").addEventListener("click",e=>{
-  const b=e.target.closest("button"); if(!b)return;
-  const view=b.dataset.view;
-  forecastMode = view==="forecast";
-  if(forecastMode) dashMode=false;
-  [...$("#viewToggle").children].forEach(x=>x.classList.toggle("on",x===b));
-  $(".search").style.display=forecastMode?"none":"";
-  $("#chips").style.display=forecastMode?"none":"";
-  $(".toolbar").style.display=forecastMode?"none":"";
-  if(forecastMode){
-    $("#list").style.display="none";
-    $("#dashboard").style.display="none";
-    $("#forecastPanel").style.display="";
-    fetchForecast();
-  } else {
-    $("#forecastPanel").style.display="none";
-    $("#list").style.display="";
-    render();
-  }
-});
+
 
 async function fetchForecast(){
   if(!Auth.loggedIn||!BACKEND_URL) return;
@@ -1589,7 +1641,6 @@ function renderForecast(){
   $(".toolbar").style.display="none";
   $("#list").style.display="none";
   $("#dashboard").style.display="none";
-  $("#depSeg").style.display="none";
   $("#depPanel").style.display="none";
   $("#forecastPanel").style.display="";
   if(!forecastData){ fetchForecast(); return; }
