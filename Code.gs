@@ -181,13 +181,13 @@ var MAP = {
 var DEPOSITS = {
   KRW: { tab: "[RAW] KRW data", skip: 3, keyCol: 4, amount: 6, date: 5, vaType: 15,
          nameCol: 3, clientCol: 0,
-         excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid" },
+         excludeCol: 0, excludeVal: "SENTBE TEST", joinBy: "mid", cur: "KRW" },
   VND: { tab: "[RAW] VND data", skip: 1, keyCol: 4, amount: 11, date: 6, acctCol: 5,
          nameCol: 4, clientCol: 1,
          // 보드는 VND를 FI Merchant로 묶는다(GEP·YeePay·Direct-Merchant…). RAW 탭은 직접 머천트를
          // 회사명 그대로 적으므로, FI/Direct 컬럼을 보고 보드와 같은 라벨로 맞춘다.
          directCol: 2, directVal: "Direct", directLabel: "Direct-Merchant",
-         vaMinDigits: 15, curLabel: "H-PAY", altLabel: "Baokim", requireCol: 0, joinBy: "name" }
+         vaMinDigits: 15, curLabel: "H-PAY", altLabel: "Baokim", requireCol: 0, joinBy: "name", cur: "USD" }
 };
 
 function normName_(s) {
@@ -960,8 +960,8 @@ function getSlackWebhook_() {
   return PropertiesService.getScriptProperties().getProperty("SLACK_WEBHOOK_URL") || "";
 }
 
-function sendSlack_(payload) {
-  var url = getSlackWebhook_();
+function sendSlack_(payload, url) {
+  url = url || getSlackWebhook_();
   if (!url) { Logger.log("SLACK_WEBHOOK_URL not set"); return false; }
   try {
     var resp = UrlFetchApp.fetch(url, {
@@ -1167,6 +1167,146 @@ function sendStaleAlert() {
   sendSlack_({ blocks: blocks });
 }
 
+/* ---- 입금 중단 경보 (일일 트리거) ----
+ * 거래하던 머천트가 멈춘 것을 알린다. 승인됐는데 시작조차 안 한 건은 주간 보고가 담당한다.
+ *
+ * 경과일만 보면 순서가 뒤집힌다. 24일 된 ₩142억이 안 뜨고 117일 된 ₩200만이 뜬다.
+ * 그래서 볼륨 구간별로 임계일을 달리 둔다. 구간 경계는 누적 점유율이라 금액을 하드코딩하지 않고,
+ * 코리도가 커지면 기준도 따라 움직인다.
+ *
+ * QUIET_MAX_DAYS: 이보다 오래 조용한 건 "멈춘" 게 아니라 "끝난" 관계다.
+ * 원천에 2024년 이력이 들어오면서 300일·464일 무입금 건이 볼륨 상위에 배치돼
+ * 매번 경보에 올라오는 문제가 생겼다. 이탈 경보는 최근까지 거래한 곳만 대상으로 한다.
+ *
+ * 반복 억제는 장기 체류 알림과 같은 단계 승격 방식이다(escalationStep_).
+ */
+var QUIET_BANDS = [
+  { name: "상위", cumTo: 0.80, days: 14 },
+  { name: "중간", cumTo: 0.99, days: 30 },
+  { name: "하위", cumTo: 2.00, days: 60, off: true }   // 첫 발송 범위에서 제외 — 목록이 소화된 뒤 켠다
+];
+var QUIET_MAX_DAYS = 180;
+var QUIET_SNAP_KEY = "deposit_quiet_snap";
+
+function getSalesWebhook_() {
+  var p = PropertiesService.getScriptProperties();
+  // 세일즈 채널을 나누기 전에는 기존 웹훅으로 간다. 속성만 채우면 코드 변경 없이 분리된다.
+  return p.getProperty("SLACK_WEBHOOK_URL_SALES") || p.getProperty("SLACK_WEBHOOK_URL") || "";
+}
+
+function fmtAmt_(v, cur) {
+  var n = Math.round(v);
+  if (cur === "KRW") {
+    if (n >= 1e8) return "₩" + (n / 1e8).toFixed(1) + "억";
+    if (n >= 1e4) return "₩" + Math.round(n / 1e4).toLocaleString() + "만";
+    return "₩" + n.toLocaleString();
+  }
+  if (n >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+  if (n >= 1e3) return "$" + Math.round(n / 1e3).toLocaleString() + "K";
+  return "$" + n.toLocaleString();
+}
+
+/* 볼륨 구간별 임계일을 넘겨 조용해진 머천트. 금액 큰 순 — 전화할 순서다. */
+function quietRows_(key, todayYmd) {
+  var cfg = DEPOSITS[key] || {};
+  var dep = readDeposits_(key);
+  var meta = dep._meta || {};
+  var total = meta.total || 0;
+  if (!total) return [];
+
+  var ms = Object.keys(dep).filter(function(k) { return k.charAt(0) !== "_"; })
+    .map(function(k) {
+      var o = dep[k];
+      return { k: k, name: o.name || k, client: o.client || "", sum: o.sum, n: o.n, last: o.last };
+    })
+    .sort(function(a, b) { return b.sum - a.sum; });
+
+  var cum = 0, out = [];
+  ms.forEach(function(m) {
+    // 구간은 이 머천트를 더하기 "전"의 누적으로 정한다. 더한 뒤로 보면 경계를 걸치는 머천트가
+    // 한 단계 아래로 밀려, 점유율 38%인 2위가 중간 구간으로 떨어진다.
+    var before = cum;
+    cum += m.sum / total;
+    var band = null;
+    for (var i = 0; i < QUIET_BANDS.length; i++) {
+      if (before < QUIET_BANDS[i].cumTo) { band = QUIET_BANDS[i]; break; }
+    }
+    if (!band || band.off) return;
+    if (!m.last) return;                                  // 마지막 입금일이 없으면 판정하지 않는다
+    var d = daysBetween_(m.last, todayYmd);
+    if (d == null || d < band.days) return;
+    if (d > QUIET_MAX_DAYS) return;                       // 끝난 관계는 이탈 경보 대상이 아니다
+    out.push({ key: key + ":" + m.k, name: m.name, client: m.client,
+               amt: fmtAmt_(m.sum, cfg.cur || "KRW"), share: m.sum / total * 100,
+               cnt: m.n, last: m.last, days: d, band: band.name,
+               step: escalationStep_(d, band.days), sum: m.sum });
+  });
+  return out.sort(function(a, b) { return b.sum - a.sum; });
+}
+
+/* 실제 발송 없이 지금 무엇이 나갈지 로그로만 본다. 첫 발송 전 확인용. */
+function previewQuietAlert() {
+  var tz = Session.getScriptTimeZone();
+  var today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  ["KRW", "VND"].forEach(function(key) {
+    var rows = quietRows_(key, today);
+    Logger.log("===== " + key + " 입금 중단 후보 " + rows.length + "곳 =====");
+    rows.forEach(function(x) {
+      Logger.log("  [" + x.band + "] " + x.days + "일  " + x.name + "  " + x.amt +
+                 " (" + x.share.toFixed(1) + "%)  " + x.cnt + "건  ~" + x.last +
+                 "  단계=" + x.step);
+    });
+  });
+  Logger.log("상위·중간 구간만 대상. " + QUIET_MAX_DAYS +
+             "일 초과는 끝난 관계로 보고 제외한다.");
+}
+
+function sendQuietAlert() {
+  var tz = Session.getScriptTimeZone();
+  var today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  var props = PropertiesService.getScriptProperties();
+  var raw = props.getProperty(QUIET_SNAP_KEY);
+  var snap = {};
+  if (raw) { try { snap = JSON.parse(raw); } catch (e) {} }
+
+  var next = {}, sections = [], total = 0, atRisk = 0;
+
+  ["KRW", "VND"].forEach(function(key) {
+    var rows = quietRows_(key, today);
+    var fresh = [];
+    rows.forEach(function(x) {
+      next[x.key] = x.step;
+      if (x.step > (snap[x.key] || 0)) fresh.push(x);
+    });
+    if (!fresh.length) return;
+    total += fresh.length;
+    atRisk += rows.length;
+    var lines = fresh.map(function(x) {
+      return "• `" + x.days + "일` *" + x.name + "*  " + x.amt +
+             " (" + x.share.toFixed(1) + "%)\n    " + x.band + " · " +
+             (x.client ? x.client + " · " : "") + x.cnt + "건 · 마지막 " + x.last;
+    });
+    sections.push({ type: "section", text: { type: "mrkdwn",
+      text: "*[" + key + "] " + fresh.length + "곳*\n" + lines.join("\n") } });
+  });
+
+  props.setProperty(QUIET_SNAP_KEY, JSON.stringify(next));
+  Logger.log("sendQuietAlert: 새로 알릴 " + total + "곳 / 추적 " +
+             Object.keys(next).length + "곳");
+  if (!total) return;   // 새로 단계를 넘은 게 없으면 조용히 넘어간다
+
+  var blocks = [
+    { type: "header", text: { type: "plain_text",
+      text: ":money_with_wings: 입금 중단 " + total + "곳" } }
+  ].concat(sections, [
+    { type: "divider" },
+    { type: "context", elements: [{ type: "mrkdwn",
+      text: "추적 중 " + Object.keys(next).length + "곳 · 볼륨 상위 14일 / 중간 30일 · " +
+            ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+  ]);
+  sendSlack_({ blocks: blocks }, getSalesWebhook_());
+}
+
 /* ---- 주간 보고 Slack 전송 ---- */
 function sendSlackWeeklyReport() {
   var tz = Session.getScriptTimeZone();
@@ -1220,7 +1360,7 @@ function createSlackTriggers() {
   for (var i = triggers.length - 1; i >= 0; i--) {
     var fn = triggers[i].getHandlerFunction();
     if (fn === "onSheetEdit" || fn === "sendSlackWeeklyReport" || fn === "pollStatusChanges" ||
-        fn === "sendStaleAlert") {
+        fn === "sendStaleAlert" || fn === "sendQuietAlert") {
       ScriptApp.deleteTrigger(triggers[i]);
       Logger.log("Deleted old trigger: " + fn);
     }
@@ -1245,6 +1385,15 @@ function createSlackTriggers() {
     .everyDays(1)
     .atHour(9)
     .nearMinute(30)
+    .inTimezone("Asia/Seoul")
+    .create();
+
+  // 입금 중단도 같은 이유로 하루 한 번. 장기 체류 다음에 오도록 09:40.
+  ScriptApp.newTrigger("sendQuietAlert")
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .nearMinute(40)
     .inTimezone("Asia/Seoul")
     .create();
 
