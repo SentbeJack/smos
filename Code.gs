@@ -215,7 +215,18 @@ function depDate_(v, tz) {
   if (m) return m[1] + "-" + m[2] + "-" + m[3];
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);          // DD/MM/YYYY
   if (m) return m[3] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[1]).slice(-2);
+  m = s.match(/^(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/);    // 2026. 5. 26 (시트 한국 로케일)
+  if (m) return m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2);
   return "";
+}
+
+/* yyyy-MM-dd 두 날짜의 일수 차. 로컬 시간대 DST 영향을 안 받게 UTC로 계산한다. */
+function daysBetween_(fromYmd, toYmd) {
+  var a = fromYmd.split("-"), b = toYmd.split("-");
+  if (a.length !== 3 || b.length !== 3) return null;
+  var t1 = Date.UTC(+a[0], +a[1] - 1, +a[2]);
+  var t2 = Date.UTC(+b[0], +b[1] - 1, +b[2]);
+  return Math.round((t2 - t1) / 86400000);
 }
 
 /* 머천트 키 → { sum, n, last, va } 집계. 5분 캐시. */
@@ -1062,6 +1073,69 @@ function pollStatusChanges() {
   });
 }
 
+/* ---- 장기 체류 알림 (일일 트리거) ----
+ * 같은 상태로 STALE_DAYS 이상 머문 건을 하루 한 번 묶어 보낸다.
+ * 건별로 보내면 소음이 되고, 애초에 "오래 방치됐다"는 건 실시간 사건이 아니다.
+ *
+ * 기준일 선정 근거(2026-09-11 실데이터): 미완결 KRW 8건의 경과일은
+ * 108 · 23 · 23 · 15 · 2 · 1 · 1 · 1일. 7일→4건 / 14일→4건 / 21일→3건 / 30일→1건.
+ * SLA 대부분이 1~3일에 끝나므로 14일은 충분히 관대하면서 방치 건만 걸러낸다.
+ */
+var STALE_DAYS = 14;
+
+/* 종결 상태가 아니면서 요청일로부터 STALE_DAYS 이상 지난 행. 경과일 내림차순. */
+function staleRows_(key, rows, todayYmd, tz) {
+  var cs = CORRIDOR_STATUSES[key];
+  if (!cs) return [];
+  // progress 목록에 빠진 상태값(KRW "Inquiries")도 방치될 수 있으니, 종결이 아닌 것 전부를 본다.
+  var done = cs.success.concat(cs.failed, cs.withdrawn);
+  var out = [];
+  rows.forEach(function(r) {
+    var st = String(r.status || "").trim();
+    if (!st || done.indexOf(st) >= 0) return;
+    var day = depDate_(r.requestDate, tz);
+    if (!day) return;                       // 요청일이 비면 경과일을 만들 수 없다 — 추정하지 않는다
+    var d = daysBetween_(day, todayYmd);
+    if (d == null || d < STALE_DAYS) return;
+    out.push({ name: r.name, mid: r.merchantId, group: r.client || r.fiMerchant || "",
+               status: st, since: day, days: d });
+  });
+  return out.sort(function(a, b) { return b.days - a.days; });
+}
+
+function sendStaleAlert() {
+  var tz = Session.getScriptTimeZone();
+  var todayYmd = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  var sections = [], total = 0, worst = 0;
+
+  ["KRW", "VND"].forEach(function(key) {
+    var stale = staleRows_(key, readTab(MAP[key], {}), todayYmd, tz);
+    if (!stale.length) return;
+    total += stale.length;
+    if (stale[0].days > worst) worst = stale[0].days;
+    var lines = stale.map(function(x) {
+      return "• `" + x.days + "일` *" + x.name + "*" + (x.mid ? "  `" + x.mid + "`" : "") +
+             "\n    " + x.status + (x.group ? " · " + x.group : "") + " · " + x.since + " 이후";
+    });
+    sections.push({ type: "section", text: { type: "mrkdwn",
+      text: "*[" + key + "] " + stale.length + "건*\n" + lines.join("\n") } });
+  });
+
+  Logger.log("sendStaleAlert: " + total + "건 (기준 " + STALE_DAYS + "일)");
+  if (!total) return;   // 걸린 게 없으면 아무 말도 하지 않는다 — 매일 "0건" 알림은 소음이다
+
+  var blocks = [
+    { type: "header", text: { type: "plain_text",
+      text: ":hourglass_flowing_sand: 장기 체류 " + total + "건 (" + STALE_DAYS + "일 이상)" } }
+  ].concat(sections, [
+    { type: "divider" },
+    { type: "context", elements: [{ type: "mrkdwn",
+      text: "최장 " + worst + "일 · 기준 " + STALE_DAYS + "일 · " +
+            ":link: <https://sentbejack.github.io/smos/|SMOS Dashboard>" }] }
+  ]);
+  sendSlack_({ blocks: blocks });
+}
+
 /* ---- 주간 보고 Slack 전송 ---- */
 function sendSlackWeeklyReport() {
   var tz = Session.getScriptTimeZone();
@@ -1114,7 +1188,8 @@ function createSlackTriggers() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = triggers.length - 1; i >= 0; i--) {
     var fn = triggers[i].getHandlerFunction();
-    if (fn === "onSheetEdit" || fn === "sendSlackWeeklyReport" || fn === "pollStatusChanges") {
+    if (fn === "onSheetEdit" || fn === "sendSlackWeeklyReport" || fn === "pollStatusChanges" ||
+        fn === "sendStaleAlert") {
       ScriptApp.deleteTrigger(triggers[i]);
       Logger.log("Deleted old trigger: " + fn);
     }
@@ -1130,6 +1205,15 @@ function createSlackTriggers() {
     .onWeekDay(ScriptApp.WeekDay.MONDAY)
     .atHour(9)
     .nearMinute(10)
+    .inTimezone("Asia/Seoul")
+    .create();
+
+  // 장기 체류는 실시간 사건이 아니므로 하루 한 번. 출근 직후에 보이도록 09:30.
+  ScriptApp.newTrigger("sendStaleAlert")
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .nearMinute(30)
     .inTimezone("Asia/Seoul")
     .create();
 
