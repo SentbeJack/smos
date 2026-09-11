@@ -874,9 +874,15 @@ const CORRIDORS = {
       {field:"jira",        header:"Jira Link (for tracking)", label:"지라",      labelEn:"Jira",           type:"url"},
     ],
     success:["Approved"],
+    /* 시트 실제 표기는 `In-progress`(하이픈)이고 `Withdrawn`도 있다. Code.gs의
+       CORRIDOR_STATUSES는 둘 다 알고 있었지만 여기엔 없어서, 93행 중 19행이
+       필터 칩으로 도달 불가였다(칩 합계 74). 두 표기를 다 둔다 — 0건인 상태값은
+       칩이 렌더되지 않으므로 시트가 어느 쪽을 쓰든 안전하다. */
     statuses:[
+      {v:"In-progress", tone:"amber"},
       {v:"In progress", tone:"amber"},
       {v:"Approved", tone:"green"},
+      {v:"Withdrawn", tone:"slate"},
       {v:"Rejected / Offboarded", tone:"rose"},
     ],
     steps:[
@@ -1083,7 +1089,8 @@ function stepOf(r){
     else if(r.status==="Succeeded"){ states[1]="done"; states[2]="done"; if(r.va&&r.va!=="N") states[3]="done"; }
     else if(r.status==="Failed"){ states[1]="done"; states[2]="fail"; }
   } else if(active==="VND"){
-    if(r.status==="In progress"){ states[1]="active"; }
+    // 시트는 `In-progress`, 예전 문서는 `In progress`. 하이픈/공백을 같게 본다.
+    if(/^in[\s-]?progress$/i.test(String(r.status||"").trim())){ states[1]="active"; }
     else if(r.status==="Approved"){ states[1]="done"; states[2]="done"; if(r.va&&r.va!=="N") states[3]="done"; }
     else if(r.status==="Rejected / Offboarded"){ states[1]="done"; states[2]="fail"; }
   }
