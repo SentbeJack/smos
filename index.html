@@ -105,6 +105,8 @@
   .mid{font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--muted);}
   .bank-chip{font-size:10.5px; font-weight:650; color:var(--s-info-t,var(--accent)); background:var(--s-info-b,color-mix(in srgb, var(--accent) 12%, transparent)); padding:2px 7px; border-radius:5px;}
   .reason-chip{font-size:10.5px; font-weight:650; color:var(--s-rej-t); background:var(--s-rej-b); padding:2px 7px; border-radius:5px;}
+  /* 조용해짐 — 거절(빨강)이 아니라 주의(주황)다. 실패가 아니고 후속 대상이라는 뜻이다. */
+  .quiet-chip{font-size:10.5px; font-weight:700; color:var(--s-vaw-t); background:var(--s-vaw-b); padding:2px 7px; border-radius:5px;}
   .va-flag{font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px;}
   .va-yes{color:var(--s-vac-t); background:var(--s-vac-b); cursor:pointer; transition:all .12s;}
   .va-yes:active{transform:scale(.95);}
@@ -213,6 +215,9 @@
   .dp-tbl td.fi{color:var(--muted); font-size:11px; max-width:110px; overflow:hidden; text-overflow:ellipsis;}
   .dp-bar{display:flex; align-items:center; gap:9px; margin-bottom:6px;}
   .dp-bar .mo{font-family:var(--mono); font-size:11px; font-weight:650; color:var(--ink-2); width:52px; flex:none;}
+  /* 클라이언트 이름은 월(26-01)보다 길다. 같은 막대를 쓰고 라벨 폭만 넓힌다. */
+  .dp-bar.wide .mo{width:100px; font-family:inherit; font-size:11.5px; font-weight:600;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .dp-bar .tk{flex:1; display:flex; height:17px; background:var(--surface-2); border-radius:5px; overflow:hidden;}
   .dp-bar .tk i{display:block; height:100%;}
   .dp-bar .v{font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--muted);
@@ -560,8 +565,40 @@ const STRINGS = {
     dvList:"Merchants",
     dvConc:"Concentration",
     dvTrend:"Trend",
+    dvLead:"Lead Time",
     dvDash:"Dashboard",
     dvForecast:"Forecast",
+    quietChip:d=>`조용 ${d}일`,
+    quietKey:"입금 중단",
+    quietVal:(b,d)=>`${b} 구간 · ${d}일 무입금`,
+    leadEmpty:"리드타임을 계산할 날짜가 아직 없습니다.",
+    leadSla:"온보딩 소요일",
+    leadSlaSub:"요청 → 심사 완료",
+    leadMed:"중위값",
+    leadP90:"p90",
+    leadWorst:"최장",
+    leadSample:n=>`표본 ${n}건`,
+    leadByClient:"클라이언트별 중위값",
+    leadClientNote:"표본 3건 미만인 클라이언트는 표시하지 않습니다. 1~2건의 평균은 추세가 아닙니다.",
+    leadByMonth:"월별 중위값",
+    leadMonthNote:"심사가 끝난 달로 묶습니다. 지금 나아지고 있는지를 보는 축입니다.",
+    leadSlowTitle:d=>`${d}일 초과`,
+    leadGoNote:"행을 누르면 그 머천트로 이동합니다.",
+    leadAct:"활성화 리드타임",
+    leadActSub:"심사 완료 → 첫 입금",
+    leadActSubVa:"VA 발급 → 첫 입금",
+    leadActMed:"중위 활성화",
+    leadAct30:"30일 내 활성화",
+    leadActPend:"입금 대기",
+    leadPendTitle:"30일 넘게 첫 입금 없는 곳",
+    leadPendNote:"승인은 났는데 돈이 아직 안 들어온 곳입니다. 세일즈가 전화할 대상입니다.",
+    leadAct30Note:n=>`분모는 기준일로부터 30일이 지난 ${n}곳입니다. 이번 주 승인 건은 아직 기회가 없어 제외합니다.`,
+    leadDays:n=>`${n}일`,
+    leadPre:n=>`승인 전부터 거래 중이던 ${n}곳은 0일로 봅니다.`,
+    leadSlaKrwOnly:"VND는 요청일이 채워진 건이 적어 온보딩 소요일을 계산하지 않습니다.",
+    colDays:"일수",
+    colWaited:"경과",
+    colFirstDep:"첫 입금",
     mmTheme:"테마",
     mmLang:"언어",
     perAll:"전체 기간",
@@ -681,8 +718,40 @@ const STRINGS = {
     dvList:"Merchants",
     dvConc:"Concentration",
     dvTrend:"Trend",
+    dvLead:"Lead Time",
     dvDash:"Dashboard",
     dvForecast:"Forecast",
+    quietChip:d=>`quiet ${d}d`,
+    quietKey:"Deposits stopped",
+    quietVal:(b,d)=>`${b} band · ${d} days quiet`,
+    leadEmpty:"No dates to compute lead time from yet.",
+    leadSla:"Onboarding days",
+    leadSlaSub:"Request → decision",
+    leadMed:"Median",
+    leadP90:"p90",
+    leadWorst:"Longest",
+    leadSample:n=>`${n} case${n===1?"":"s"}`,
+    leadByClient:"Median by client",
+    leadClientNote:"Clients with fewer than 3 cases are hidden. An average of 1–2 cases is not a trend.",
+    leadByMonth:"Median by month",
+    leadMonthNote:"Grouped by the month the decision landed — the axis that answers whether we are improving.",
+    leadSlowTitle:d=>`Over ${d} days`,
+    leadGoNote:"Tap a row to jump to that merchant.",
+    leadAct:"Activation lead time",
+    leadActSub:"Decision → first deposit",
+    leadActSubVa:"VA issued → first deposit",
+    leadActMed:"Median activation",
+    leadAct30:"Activated in 30d",
+    leadActPend:"Awaiting deposit",
+    leadPendTitle:"No first deposit after 30 days",
+    leadPendNote:"Approved, but the money has not arrived. This is the call list for sales.",
+    leadAct30Note:n=>`Denominator is the ${n} merchants whose anchor date is at least 30 days old. This week's approvals have not had the chance yet.`,
+    leadDays:n=>`${n}d`,
+    leadPre:n=>`${n} merchant${n===1?"":"s"} already transacting before approval count as 0 days.`,
+    leadSlaKrwOnly:"VND request dates are too sparse to compute onboarding days.",
+    colDays:"Days",
+    colWaited:"Waited",
+    colFirstDep:"First deposit",
     mmTheme:"Theme",
     mmLang:"Language",
     perAll:"All time",
@@ -783,6 +852,11 @@ const CORRIDORS = {
       {key:"va", label:"VA 발급", labelEn:"VA Issued"},
     ],
     currency:"KRW", depJoin:"mid",
+    /* 리드타임 뷰 설정 — 코리도 차이는 여기서만 처리한다.
+       slaField: 시트가 이미 계산해 둔 소요일. 앱은 읽기만 한다.
+       actAnchor: 활성화 리드타임의 시작점. KRW는 VA 발급일이 시트에 없어 심사 판정일을 쓴다. */
+    slaField:"sla", slaDateField:"decisionDate",
+    actAnchor:"decisionDate", actAnchorLabel:"leadActSub",
   },
   VND:{
     label:"VND",
@@ -813,6 +887,9 @@ const CORRIDORS = {
     ],
     /* [RAW] VND data의 H-PAY 거래(수취계좌 공란)를 머천트명으로 합산한 USD */
     currency:"USD", depJoin:"name",
+    /* VND는 요청일(Submission Request Date)이 40/93건뿐이라 온보딩 소요일을 계산하지 않는다.
+       활성화는 VA 발급일 71/93으로 채워진 만큼만 낸다 — 없는 건은 추정하지 않고 비운다. */
+    actAnchor:"vaDate", actAnchorLabel:"leadActSubVa",
   },
 };
 
@@ -979,6 +1056,17 @@ function depKeyOf(r){
   return String(r[nameField()]||"").toUpperCase().replace(/^SB\s+/,"").replace(/[^A-Z0-9]/g,"");
 }
 
+/* ---- 조용해짐 ----
+ * 거래하던 머천트가 멈춘 것. 판정은 백엔드가 하고(quietRows_) 화면은 받아 쓴다 —
+ * Slack 경보와 같은 함수라 "왜 알림은 안 왔지"가 생기지 않는다.
+ * 기간 필터를 걸어도 값이 바뀌지 않는다: 경보는 항상 오늘 기준이어야 한다. */
+function quietOf(r){
+  const q=DEP().quiet;
+  if(!q) return null;
+  const v=q[depKeyOf(r)];
+  return v ? { band:v[0], days:v[1] } : null;
+}
+
 /* 전체 입금액 대비 점유율. 분모는 백엔드 합계라 화면 필터에 흔들리지 않는다. */
 function depShare(v){
   const t=depTotal();
@@ -1074,6 +1162,8 @@ function render(){
   $("#btnWeeklyReport").textContent = "📧 "+L("weeklyReport");
   $("#mmTheme").textContent = L("mmTheme");
   $("#mmLang").textContent = L("mmLang");
+  // 코리도를 바꾸면 그 코리도에 없는 분석 뷰가 남는다(VND엔 SLA가 없는 등). 목록으로 돌린다.
+  if(depView!=="list" && !navItems().some(([v])=>v===depView)) depView="list";
   renderTabs(); updateSync(); renderViewNav(); renderPeriod();
   if(forecastMode){ renderForecast(); return; }
   $("#forecastPanel").style.display="none";
@@ -1086,7 +1176,8 @@ function render(){
   $("#depPanel").style.display=analytic?"":"none";
   $("#list").style.display=noTools?"none":"";
   $("#dashboard").style.display=dashMode?"":"none";
-  if(analytic){ $("#depPanel").innerHTML = depView==="conc"?concHTML():trendHTML(); return; }
+  if(analytic){ $("#depPanel").innerHTML =
+    depView==="conc"?concHTML():depView==="lead"?leadHTML():trendHTML(); return; }
   renderChips();
   if(dashMode){ renderDash(); return; }
 
@@ -1200,6 +1291,7 @@ function itemHTML(r){
           ${r.noOnboarding?`<span class="noonb-tag">${L("noOnboarding")}</span>`:``}
           ${(()=>{const bc=colOf("bank"); return bc&&r[bc.field]?`<span class="bank-chip">${esc(r[bc.field])}</span>`:``})()}
           ${r.va?`<span class="va-flag va-yes" data-act="copy-va" data-va="${esc(r.va)}">VA ✓</span>`:``}
+          ${(()=>{const q=quietOf(r); return q?`<span class="quiet-chip" title="${esc(LF("quietVal",q.band,q.days))}">${LF("quietChip",q.days)}</span>`:``})()}
           ${reason?`<span class="reason-chip">${esc(reason)}</span>`:``}
           ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>{const u=r[c.field],href=/^https?:\/\//i.test(u)?u:"https://"+u; return `<a class="url-chip" href="${esc(href)}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`;}).join("")}
         </div>
@@ -1230,6 +1322,9 @@ function depDetail(r){
     <span class="d-val mono">${dp.cnt}${lang==="EN"?"":"건"}</span></div>`;
   if(dp.last) h+=`<div class="d-item"><span class="d-key">${L("depLast")}</span>
     <span class="d-val mono">${esc(dp.last)}</span></div>`;
+  const q=quietOf(r);
+  if(q) h+=`<div class="d-item"><span class="d-key">${L("quietKey")}</span>
+    <span class="d-val"><span class="quiet-chip">${esc(LF("quietVal",q.band,q.days))}</span></span></div>`;
   if(r.depVaType) h+=`<div class="d-item"><span class="d-key">${L("depVaType")}</span>
     <span class="d-val">${esc(r.depVaType)}</span></div>`;
   return h;
@@ -1419,6 +1514,182 @@ function trendHTML(){
   </div>`;
 }
 
+/* ---- 리드타임: 온보딩이 얼마나 걸리고, 끝난 뒤 돈은 언제 들어오나 ----
+ * 요청→심사(우리 속도)와 심사→첫 입금(활성화)을 한 화면에 둔다. 둘은 "신청부터 돈까지"라는
+ * 한 질문의 앞뒤 구간이라, 탭을 나누면 둘을 같이 보지 않게 된다.
+ * 평균을 쓰지 않는다 — 191일 한 건이 평균을 혼자 끌어올려 111건의 실상을 가린다.
+ *
+ * 기간 필터를 타지 않는다. 저 선택은 "머천트별 매출"용이고 목록 화면에만 보이는데,
+ * 연도 목록은 입금이 있는 연도로만 만들어진다(depYears). 입금은 2024년부터인데 온보딩은
+ * 2026년부터라 2024를 고르면 이 탭이 통째로 비는 구멍이 생긴다.
+ * 시간축은 아래 "월별 중위값"이 담당한다 — 나아지고 있나에 답하는 건 그쪽이다.
+ */
+const ymd = v => { const m=String(v??"").trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:""; };
+function dayDiff(a,b){
+  if(!ymd(a)||!ymd(b)) return null;
+  return Math.round((Date.UTC(+b.slice(0,4),+b.slice(5,7)-1,+b.slice(8,10))
+                    -Date.UTC(+a.slice(0,4),+a.slice(5,7)-1,+a.slice(8,10)))/864e5);
+}
+function todayYmd(){
+  const d=new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+const median = a => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+  return s.length%2 ? s[m] : Math.round((s[m-1]+s[m])/2*10)/10; };
+const pctl = (a,p) => { if(!a.length) return null; const s=[...a].sort((x,y)=>x-y);
+  return s[Math.max(0,Math.min(s.length-1,Math.ceil(p/100*s.length)-1))]; };
+/* 시트가 계산한 소요일. 공란은 0이 아니라 "모름"이다 — 0으로 접으면 중위값이 내려간다. */
+function slaOf(r){
+  const f=CORR().slaField; if(!f) return null;
+  const s=String(r[f]??"").trim(); if(!s) return null;
+  const n=Number(s.replace(/[^\d.-]/g,""));
+  return isFinite(n) && n>=0 ? n : null;
+}
+/* 이 코리도에 리드타임 탭을 띄울 데이터가 있나 */
+function hasLead(){
+  const a=CORR().actAnchor;
+  return Store.rows().some(r=>slaOf(r)!=null || (a && ymd(r[a])));
+}
+
+function leadHTML(){
+  const c=CORR(), nf=nameField(), gf=groupField(), today=todayYmd();
+  const cards=[];
+
+  /* ===== 1. 온보딩 소요일 (시트 SLA) ===== */
+  if(c.slaField){
+    const all=Store.rows().map(r=>{
+      const d=slaOf(r); if(d==null) return null;
+      // 심사가 끝난 달로 묶는다. 판정일이 비면 요청일로 떨어진다.
+      const mo=(ymd(r[c.slaDateField])||ymd(r.requestDate)||"").slice(0,7);
+      return { r, d, mo };
+    }).filter(Boolean);
+
+    if(all.length){
+      const ds=all.map(x=>x.d);
+      const byC={};
+      all.forEach(x=>{ const k=x.r[gf]||L("noGroup"); (byC[k]=byC[k]||[]).push(x.d); });
+      // 느린 순으로 세운다. 이 표를 보는 목적은 어디에 붙어야 하는지를 찾는 것이다.
+      const cl=Object.keys(byC).filter(k=>byC[k].length>=3)
+        .map(k=>[k,median(byC[k]),byC[k].length]).sort((a,b)=>b[1]-a[1]);
+      const hidden=Object.keys(byC).length-cl.length;
+      const cmx=Math.max(1,...cl.map(x=>x[1]));
+      // 1일 대 191일이면 빠른 쪽 막대가 1.6%로 사실상 안 보인다. 최소 폭을 준다 —
+      // "거의 없음"과 "없음"은 다르고, 빠른 클라이언트도 눈에 보여야 비교가 된다.
+      const w=(v,mx)=>Math.max(3,v/mx*100).toFixed(1);
+      const clBars=cl.map(([k,m,n])=>`<div class="dp-bar wide"><span class="mo" title="${esc(k)}">${esc(k)}</span>
+          <span class="tk"><i style="width:${w(m,cmx)}%;background:var(${m>=60?"--s-rej-d":m>=30?"--s-vaw-d":"--accent"})"></i></span>
+          <span class="v">${LF("leadDays",m)} · ${n}</span></div>`).join("");
+
+      const byM={};
+      all.forEach(x=>{ if(x.mo) (byM[x.mo]=byM[x.mo]||[]).push(x.d); });
+      const mos=Object.keys(byM).sort();
+      const mmx=Math.max(1,...mos.map(k=>median(byM[k])));
+      const mBars=mos.map(k=>{ const m=median(byM[k]);
+        return `<div class="dp-bar"><span class="mo">${esc(k.slice(2))}</span>
+          <span class="tk"><i style="width:${w(m,mmx)}%;background:var(${m>=60?"--s-rej-d":m>=30?"--s-vaw-d":"--accent"})"></i></span>
+          <span class="v">${LF("leadDays",m)} · ${byM[k].length}</span></div>`; }).join("");
+
+      const SLOW=60;
+      const slow=all.filter(x=>x.d>SLOW).sort((a,b)=>b.d-a.d);
+      const slowRows=slow.map(x=>`<tr class="go" data-act="goto-merchant" data-id="${esc(x.r.id)}"
+          data-q="${esc(x.r.merchantId||x.r[nf]||"")}" title="${esc(x.r[nf])}">
+        <td class="nm">${esc(x.r[nf])||L("noName")}</td>
+        <td class="fi">${esc(x.r[gf]||L("noGroup"))}</td>
+        <td class="n">${LF("leadDays",x.d)}</td>
+        <td class="n">${esc(x.mo||"—")}</td></tr>`).join("");
+
+      cards.push(`
+      <div class="dp-kpis">
+        <div class="dp-kpi"><dt>${L("leadMed")}</dt><dd>${median(ds)}<small>${lang==="EN"?"d":"일"}</small></dd></div>
+        <div class="dp-kpi"><dt>${L("leadP90")}</dt><dd>${pctl(ds,90)}<small>${lang==="EN"?"d":"일"}</small></dd></div>
+        <div class="dp-kpi"><dt>${L("leadWorst")}</dt><dd>${Math.max(...ds)}<small>${lang==="EN"?"d":"일"}</small></dd></div>
+      </div>
+      <div class="dp-card">
+        <div class="dp-head"><span class="dp-title">${L("leadByClient")}</span>
+          <span class="dp-aside">${L("perAll")} · ${LF("leadSample",all.length)}</span></div>
+        ${clBars}
+        ${!cl.length||hidden?`<p class="dp-note">${L("leadClientNote")}</p>`:""}
+      </div>
+      ${mos.length>1?`<div class="dp-card">
+        <div class="dp-head"><span class="dp-title">${L("leadByMonth")}</span>
+          <span class="dp-aside">${L("leadSla")} · ${L("leadSlaSub")}</span></div>
+        ${mBars}
+        <p class="dp-note">${L("leadMonthNote")}</p>
+      </div>`:""}
+      ${slow.length?`<div class="dp-card">
+        <div class="dp-head"><span class="dp-title">${LF("leadSlowTitle",SLOW)}</span>
+          <span class="dp-aside">${LF("leadSample",slow.length)}</span></div>
+        <div class="dp-tw"><table class="dp-tbl">
+          <thead><tr><th>${L("colMerchant")}</th><th>${esc(colLabel(colOf("group")))}</th>
+            <th class="n">${L("colDays")}</th><th class="n">${L("colMonth")}</th></tr></thead>
+          <tbody>${slowRows}</tbody></table></div>
+        <p class="dp-note">${L("leadGoNote")}</p>
+      </div>`:""}`);
+    }
+  } else {
+    cards.push(`<div class="dp-card"><p class="dp-note">${L("leadSlaKrwOnly")}</p></div>`);
+  }
+
+  /* ===== 2. 활성화 리드타임 (기준일 → 첫 입금) =====
+   * depFirst는 기간 필터를 타지 않는다. "첫 입금"은 한 번뿐인 사실이라 선택 기간으로 바뀌면 안 된다. */
+  const af=c.actAnchor;
+  if(af){
+    const acts=Store.rows().filter(r=>c.success.includes(r.status)).map(r=>{
+      const a=ymd(r[af]); if(!a) return null;
+      const age=dayDiff(a,today);
+      if(age==null||age<0) return null;                 // 미래 날짜는 입력 오류다
+      const f=ymd(r.depFirst);
+      const raw=f?dayDiff(a,f):null;
+      // 온보딩 기록 전부터 거래하던 곳은 음수가 나온다. 0일(이미 활성)로 본다.
+      return { r, a, f, age, d:raw==null?null:Math.max(0,raw), pre:raw!=null&&raw<0 };
+    }).filter(Boolean);
+
+    if(acts.length){
+      const done=acts.filter(x=>x.d!=null);
+      const pre=done.filter(x=>x.pre).length;
+      // 30일 내 활성화율의 분모는 "30일이 지난 곳"이다. 이번 주 승인 건까지 넣으면
+      // 아직 기회가 없던 곳이 미활성으로 세어져 비율이 늘 내려간다.
+      const ripe=acts.filter(x=>x.age>=30);
+      const in30=ripe.filter(x=>x.d!=null&&x.d<=30).length;
+      const pend=acts.filter(x=>x.d==null&&x.age>30).sort((a,b)=>b.age-a.age);
+      const pendRows=pend.map(x=>`<tr class="go" data-act="goto-merchant" data-id="${esc(x.r.id)}"
+          data-q="${esc(x.r.merchantId||x.r[nf]||"")}" title="${esc(x.r[nf])}">
+        <td class="nm">${esc(x.r[nf])||L("noName")}</td>
+        <td class="fi">${esc(x.r[gf]||L("noGroup"))}</td>
+        <td class="n">${esc(x.a)}</td>
+        <td class="n">${LF("leadDays",x.age)}</td></tr>`).join("");
+
+      cards.push(`
+      <div class="dp-kpis">
+        <div class="dp-kpi"><dt>${L("leadActMed")}</dt><dd>${
+          done.length?median(done.map(x=>x.d)):"—"}<small>${lang==="EN"?"d":"일"}</small></dd></div>
+        <div class="dp-kpi"><dt>${L("leadAct30")}</dt><dd>${
+          ripe.length?Math.round(in30/ripe.length*100):"—"}<small>%</small></dd></div>
+        <div class="dp-kpi"><dt>${L("leadActPend")}</dt><dd>${pend.length}<small>${lang==="EN"?"":"곳"}</small></dd></div>
+      </div>
+      <div class="dp-card">
+        <div class="dp-head"><span class="dp-title">${L("leadAct")}</span>
+          <span class="dp-aside">${L(c.actAnchorLabel)} · ${L("perAll")}</span></div>
+        <p class="dp-note">${LF("leadAct30Note",ripe.length)}${pre?" "+LF("leadPre",pre):""}</p>
+      </div>
+      ${pend.length?`<div class="dp-card">
+        <div class="dp-head"><span class="dp-title">${L("leadPendTitle")}</span>
+          <span class="dp-aside">${LF("leadSample",pend.length)}</span></div>
+        <div class="dp-tw"><table class="dp-tbl">
+          <thead><tr><th>${L("colMerchant")}</th><th>${esc(colLabel(colOf("group")))}</th>
+            <th class="n">${(()=>{const col=c.columns.find(x=>x.field===af);
+              // KRW 판정일은 목록 컬럼이 아니라(§8) 라벨이 없다. 구간 이름으로 대신 쓴다.
+              return esc(col?colLabel(col):L(c.actAnchorLabel).split(/\s*→\s*/)[0]);})()}</th>
+            <th class="n">${L("colWaited")}</th></tr></thead>
+          <tbody>${pendRows}</tbody></table></div>
+        <p class="dp-note">${L("leadPendNote")} ${L("leadGoNote")}</p>
+      </div>`:""}`);
+    }
+  }
+
+  return cards.length ? cards.join("") : `<div class="dp-card"><p class="dp-note">${L("leadEmpty")}</p></div>`;
+}
+
 function renderTabs(){
   $("#tabs").innerHTML=Object.keys(CORRIDORS).map(k=>{
     const n=(Store.data[k]||[]).length;
@@ -1454,6 +1725,7 @@ function navItems(){
   const hasDep = (Number(DEP().total)||0) > 0;
   const items = [["list", L("dvList")]];
   if(hasDep) items.push(["conc", L("dvConc")], ["trend", L("dvTrend")]);
+  if(hasLead()) items.push(["lead", L("dvLead")]);
   items.push(["dash", L("dvDash")], ["forecast", L("dvForecast")]);
   return items;
 }
@@ -1464,13 +1736,22 @@ function currentNav(){
 }
 function renderViewNav(){
   const cur = currentNav();
-  $("#viewNav").innerHTML = navItems()
+  const nav = $("#viewNav");
+  nav.innerHTML = navItems()
     .map(([v,label])=>`<button data-nav="${v}" class="${cur===v?"on":""}">${esc(label)}</button>`).join("");
+  // 탭이 6개가 되어 폰에서는 줄이 넘친다. 선택된 탭이 화면 밖이면 보이는 곳까지 당긴다.
+  // scrollIntoView는 세로로도 움직여 헤더가 튀므로 가로 위치만 직접 맞춘다.
+  const on = nav.querySelector("button.on");
+  if(on && nav.scrollWidth > nav.clientWidth){
+    const l=on.offsetLeft, r=l+on.offsetWidth;
+    if(l < nav.scrollLeft) nav.scrollLeft = Math.max(0, l-12);
+    else if(r > nav.scrollLeft+nav.clientWidth) nav.scrollLeft = r-nav.clientWidth+12;
+  }
 }
 function gotoView(v){
   forecastMode = v==="forecast";
   dashMode     = v==="dash";
-  depView      = (v==="conc"||v==="trend") ? v : "list";
+  depView      = (v==="conc"||v==="trend"||v==="lead") ? v : "list";
   if(forecastMode){ renderForecast(); renderViewNav(); }
   else render();
   window.scrollTo(0,0);

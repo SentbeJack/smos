@@ -145,7 +145,11 @@ var MAP = {
       kybReason: "KYB Failed Reason",
       va: ["가상 계좌 여부", "VA"],
       vaStatus: ["VA Status", "Notification"],
-      note: "Onboarding Note"
+      note: "Onboarding Note",
+      // 리드타임 뷰용. 목록·에디터·CSV에는 노출하지 않는다(§8 건별 SLA 타이머 비목표).
+      // SLA는 시트가 이미 계산한 소요일이라 백엔드가 다시 계산하지 않는다.
+      sla: "SLA",
+      decisionDate: "Compliance approval or failure."
     }
   },
   VND: {
@@ -292,10 +296,13 @@ function readDeposits_(key) {
     diag.keptSum += amt;
 
     var o = out[k];
-    if (!o) o = out[k] = { sum: 0, n: 0, last: "", va: [], name: "", client: "", m: {} };
+    if (!o) o = out[k] = { sum: 0, n: 0, last: "", first: "", va: [], name: "", client: "", m: {} };
     o.sum += amt;
     o.n++;
     if (d && d > o.last) o.last = d;
+    // 최초 입금일 — 활성화 리드타임(승인/VA 발급 → 첫 입금)의 종점.
+    // 월 내역(m)으로는 첫 "달"만 알 수 있어 일 단위로 따로 담는다.
+    if (d && (!o.first || d < o.first)) o.first = d;
     // 머천트별 월 내역. 세일즈가 연·월로 걸러 보므로 프론트가 기간을 다시 계산할 수 있어야 한다.
     // [금액, 건수, 그 달의 마지막 입금일] — 배열로 두면 페이로드가 키 이름만큼 가벼워진다.
     if (mo) {
@@ -414,6 +421,7 @@ function attachDeposits_(key, rows) {
     r.depSum = d ? Math.round(d.sum * 100) / 100 : 0;
     r.depCnt = d ? d.n : 0;
     r.depLast = d ? d.last : "";
+    r.depFirst = d ? (d.first || "") : "";
     if (d && d.m) r.depM = d.m;        // 기간 필터용 월 내역
     if (d && d.va && d.va.length) r.depVaType = d.va.join(" / ");
   });
@@ -443,6 +451,7 @@ function depBoardMeta_(key, rows) {
       depSum: Math.round(o.sum * 100) / 100,
       depCnt: o.n,
       depLast: o.last,
+      depFirst: o.first || "",
       depM: o.m || {},
       depVaType: o.va && o.va.length ? o.va.join(" / ") : "",
       noOnboarding: true
@@ -450,6 +459,13 @@ function depBoardMeta_(key, rows) {
   });
   orphans.sort(function(a, b) { return b.depSum - a.depSum; });
   meta.orphans = orphans;
+  // 보드에도 "조용해짐"을 띄운다. 판정은 Slack 경보와 같은 함수(quietRows_)가 하므로
+  // 화면과 알림이 어긋날 수 없다. 구간을 조정하면 두 곳이 같이 움직인다.
+  meta.quiet = {};
+  try {
+    var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+    quietRows_(key, today).forEach(function(x) { meta.quiet[x.mk] = [x.band, x.days]; });
+  } catch (e) { Logger.log("quiet map skipped: " + e); }
   return meta;
 }
 
@@ -1251,7 +1267,7 @@ function quietRows_(key, todayYmd) {
     var d = daysBetween_(m.last, todayYmd);
     if (d == null || d < band.days) return;
     if (d > QUIET_MAX_DAYS) return;                       // 끝난 관계는 이탈 경보 대상이 아니다
-    out.push({ key: key + ":" + m.k, name: m.name, client: m.client,
+    out.push({ key: key + ":" + m.k, mk: m.k, name: m.name, client: m.client,
                amt: fmtAmt_(m.sum, cfg.cur || "KRW"), share: m.sum / total * 100,
                cnt: m.n, last: m.last, days: d, band: band.name,
                step: escalationStep_(d, band.days), sum: m.sum });
