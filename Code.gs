@@ -154,7 +154,10 @@ var MAP = {
       // SLA는 시트가 이미 계산한 소요일이라 백엔드가 다시 계산하지 않는다.
       sla: "SLA",
       decisionDate: "Compliance approval or failure."
-    }
+    },
+    // 활성화(승인 → 첫 입금)의 기준일. KRW는 VA 발급일이 시트에 없어 심사 판정일을 쓴다.
+    // 앱의 CORRIDORS.actAnchor와 같은 값이어야 화면과 주간 보고가 어긋나지 않는다.
+    actAnchor: "decisionDate"
   },
   VND: {
     tab: "VND",
@@ -171,7 +174,8 @@ var MAP = {
       kycDate: "Date of Onboarding KYC",
       jira: "Jira Link (for tracking)",
       bankName: "Bank name"
-    }
+    },
+    actAnchor: "vaDate"
   }
 };
 
@@ -1307,6 +1311,64 @@ function quietRows_(key, todayYmd) {
   return out.sort(function(a, b) { return b.sum - a.sum; });
 }
 
+/* ---- 활성화 (승인 → 첫 입금) ----
+ * 입금 중단 경보가 "오다가 멈춘 곳"을 맡고, 이쪽은 "한 번도 오지 않은 곳"을 맡는다.
+ * 둘은 세일즈가 할 말이 다르다 — 전자는 이탈 방어, 후자는 시작이 막힌 이유 찾기다.
+ *
+ * 개별 명단보다 클라이언트별 비율을 먼저 보여준다. 27곳에 27통 전화하는 일은 일어나지 않지만
+ * "이 FI의 42곳 중 28곳이 VA만 받고 안 쓴다"는 그 FI와의 대화 한 번이고, 그건 실제로 일어난다.
+ *
+ * 기준일은 MAP[key].actAnchor (앱의 CORRIDORS.actAnchor와 같은 값).
+ * ACTIVATION_DAYS는 앱 Lead Time 탭의 30일과 짝이다 — 한쪽만 바꾸면 두 화면이 어긋난다.
+ */
+var ACTIVATION_DAYS = 30;
+
+function activation_(key, rows, todayYmd, tz) {
+  var cs = CORRIDOR_STATUSES[key] || {};
+  var anchorField = (MAP[key] || {}).actAnchor;
+  var succ = cs.success || [];
+  var out = { appr: 0, anchored: 0, paid: 0, pending: [], byClient: {} };
+  if (!anchorField) return out;
+
+  rows.forEach(function(r) {
+    if (succ.indexOf(String(r.status || "").trim()) < 0) return;
+    out.appr++;
+    var g = String(r.client || r.fiMerchant || "").trim() || "(미지정)";
+    var G = out.byClient[g] || (out.byClient[g] = { appr: 0, anchored: 0, paid: 0, pending: 0 });
+    G.appr++;
+
+    var a = depDate_(r[anchorField], tz);
+    if (!a) return;                                   // 기준일이 없으면 판정하지 않는다
+    out.anchored++;
+    // 분모는 코리도 합계와 같은 기준(기준일이 있는 건)이어야 한다.
+    // 전체 승인으로 세면 한 줄 위의 비율과 분모가 달라져 숫자가 안 맞아 보인다.
+    G.anchored++;
+    var age = daysBetween_(a, todayYmd);
+    if (age == null || age < 0) return;               // 미래 날짜는 입력 오류다
+
+    if (r.depFirst) { out.paid++; G.paid++; return; }
+    if (age > ACTIVATION_DAYS) {
+      G.pending++;
+      out.pending.push({ name: r.name || r.merchantId || "—", mid: r.merchantId || "",
+                         client: g, since: a, days: age });
+    }
+  });
+  out.pending.sort(function(a, b) { return b.days - a.days; });
+  return out;
+}
+
+/* 조용해진 머천트의 금액 비중. 주간 보고에는 명단이 아니라 규모만 싣는다 —
+ * 명단은 같은 날 09:40 경보가 담당하고, 그쪽은 새로 악화된 것만 보낸다. */
+function quietSummary_(key, todayYmd) {
+  var rows = quietRows_(key, todayYmd);
+  if (!rows.length) return null;
+  var dep = readDeposits_(key);
+  var total = (dep._meta || {}).total || 0;
+  var sum = rows.reduce(function(a, x) { return a + x.sum; }, 0);
+  return { n: rows.length, sum: sum, cur: (DEPOSITS[key] || {}).cur || "KRW",
+           share: total ? sum / total * 100 : 0 };
+}
+
 /* 실제 발송 없이 지금 무엇이 나갈지 로그로만 본다. 첫 발송 전 확인용. */
 function previewQuietAlert() {
   var tz = Session.getScriptTimeZone();
@@ -1371,7 +1433,7 @@ function sendQuietAlert() {
 }
 
 /* ---- 주간 보고 Slack 전송 ---- */
-function sendSlackWeeklyReport() {
+function sendSlackWeeklyReport(dryRun) {
   var tz = Session.getScriptTimeZone();
   var now = new Date();
   var day = now.getDay();
@@ -1391,8 +1453,13 @@ function sendSlackWeeklyReport() {
     { type: "divider" }
   ];
 
+  var todayYmd = fmt(now);
+  var actSections = [];     // 활성화 — 온보딩이 끝났는데 돈이 안 들어온 곳
+  var quietParts = [];      // 입금 중단 — 규모만. 명단은 09:40 경보가 담당한다
+
   corridors.forEach(function(c) {
-    var rows = readTab(MAP[c.key], {});
+    // 입금 필드(depFirst)가 있어야 활성화를 판정할 수 있다. 입금 원천은 캐시된다.
+    var rows = attachDeposits_(c.key, readTab(MAP[c.key], {}));
     var start = fmt(mon), end = fmt(sun);
     var weekRows = rows.filter(function(r) { return r.requestDate && r.requestDate >= start && r.requestDate <= end; });
     var totalAppr = rows.filter(function(r) { return c.success.indexOf(r.status) >= 0; }).length;
@@ -1408,13 +1475,85 @@ function sendSlackWeeklyReport() {
     if (weekAppr) txt += " · :white_check_mark: " + weekAppr + " approved";
     if (weekFail) txt += " · :x: " + weekFail + " failed/rejected";
     blocks.push({ type: "section", text: { type: "mrkdwn", text: txt } });
+
+    /* ---- 활성화: 승인 후 첫 입금 ---- */
+    var act = activation_(c.key, rows, todayYmd, tz);
+    if (act.anchored) {
+      var rate = act.anchored ? Math.round(act.paid / act.anchored * 100) : 0;
+      var a = "*[" + c.key + "]* 활성화 *" + rate + "%* (" + act.paid + "/" + act.anchored + ")";
+      if (act.pending.length) a += " · " + ACTIVATION_DAYS + "일+ 무입금 *" + act.pending.length + "곳*";
+
+      // 클라이언트별 — 대기가 많은 순. 어디가 막혔는지가 명단보다 먼저다.
+      var cls = [];
+      for (var g in act.byClient) {
+        var G = act.byClient[g];
+        if (G.pending) cls.push([g, G]);
+      }
+      cls.sort(function(x, y) { return y[1].pending - x[1].pending; });
+      cls.slice(0, 4).forEach(function(p) {
+        var G = p[1];
+        a += "\n• *" + p[0] + "* " + G.pending + "곳 대기 · 활성화 " +
+             (G.anchored ? Math.round(G.paid / G.anchored * 100) : 0) +
+             "% (" + G.paid + "/" + G.anchored + ")";
+      });
+      if (cls.length > 4) a += "\n• 외 " + (cls.length - 4) + "개 클라이언트";
+
+      if (act.pending.length) {
+        var names = act.pending.slice(0, 3).map(function(x) {
+          return "*" + x.name + "* `" + x.days + "일`";
+        });
+        a += "\n오래된 순: " + names.join(" · ");
+        if (act.pending.length > 3) a += " 외 " + (act.pending.length - 3) + "곳";
+      }
+      actSections.push(a);
+    }
+
+    var q = quietSummary_(c.key, todayYmd);
+    if (q) quietParts.push(c.key + " *" + q.n + "곳* (" + fmtAmt_(q.sum, q.cur) +
+                           " · " + q.share.toFixed(0) + "%)");
   });
+
+  if (actSections.length) {
+    blocks.push({ type: "divider" });
+    blocks.push({ type: "section", text: { type: "mrkdwn",
+      text: ":zap: *활성화 — 온보딩은 끝났는데 입금이 없는 곳*" } });
+    actSections.forEach(function(t) {
+      blocks.push({ type: "section", text: { type: "mrkdwn", text: t } });
+    });
+    blocks.push({ type: "context", elements: [{ type: "mrkdwn",
+      text: "기준일(KRW 심사 완료 / VND VA 발급)부터 " + ACTIVATION_DAYS +
+            "일이 지난 곳. 명단 전체는 Lead Time 탭에 있습니다." }] });
+  }
+
+  // 조용해짐은 한 줄 요약만. 이번 주 새로 악화된 건은 09:40 경보가 따로 보낸다.
+  if (quietParts.length) {
+    blocks.push({ type: "section", text: { type: "mrkdwn",
+      text: ":money_with_wings: *입금 중단* — " + quietParts.join("  ·  ") } });
+  }
 
   blocks.push({ type: "divider" });
   blocks.push({ type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: ":bar_chart: Dashboard 열기" }, url: "https://sentbejack.github.io/smos/" }] });
 
+  // dryRun은 반드시 === true 로 본다. 시간 기반 트리거는 첫 인자로 이벤트 객체를 넘기는데,
+  // 그게 truthy라 느슨하게 비교하면 월요일마다 조용히 발송을 건너뛴다.
+  if (dryRun === true) {
+    Logger.log("===== 주간 보고 미리보기 (" + period + ") — 발송 안 함 =====");
+    blocks.forEach(function(b) {
+      if (b.type === "section" && b.text) Logger.log(b.text.text);
+      else if (b.type === "header") Logger.log("## " + b.text.text);
+      else if (b.type === "context") Logger.log("  (" + b.elements[0].text + ")");
+      else if (b.type === "divider") Logger.log("―――");
+    });
+    return;
+  }
+
   sendSlack_({ blocks: blocks });
   Logger.log("Slack weekly report sent for " + period);
+}
+
+/* 발송 없이 이번 주 보고 내용을 로그로만 본다. */
+function previewWeeklyReport() {
+  sendSlackWeeklyReport(true);
 }
 
 /* ---- Slack 트리거 설정 (1회 실행) ---- */
