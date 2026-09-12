@@ -7,15 +7,19 @@
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
+  /* 지면은 중립 회색, 파랑은 강조에만.
+     이전에는 바탕(#F2F6FF)·테두리(#D6E2F8)가 모두 강조색과 같은 계열이라
+     정작 강조가 배경에 묻혔다. 파랑을 지면에서 빼야 파랑이 의미를 갖는다. */
   :root{
-    --bg:#F2F6FF; --surface:#FFFFFF; --surface-2:#F7F9FE;
-    --border:#D6E2F8; --border-strong:#B4CCF8;
-    --ink:#1A1D29; --ink-2:#3D5080; --muted:#8A95B5;
-    --accent:#3176FD; --accent-2:#0746CA; --accent-tint:#F2F6FF;
+    --bg:#F6F7F9; --surface:#FFFFFF; --surface-2:#F2F4F7;
+    --border:#E6E8EC; --border-strong:#D3D7DE;
+    --ink:#14161A; --ink-2:#4A5060; --muted:#676D7A;
+    --accent:#2B5CF6; --accent-2:#1D40C4; --accent-tint:#EDF2FF;
     --radius:14px; --radius-sm:10px;
     --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-    --shadow:0 1px 2px rgba(18,38,102,.04), 0 4px 16px rgba(18,38,102,.06);
-    --shadow-lg:0 12px 40px rgba(26,29,41,.18);
+    /* 카드는 테두리로 분리한다. 그림자까지 겹치면 목록이 층층이 떠 보인다. */
+    --shadow:0 1px 2px rgba(20,22,26,.03);
+    --shadow-lg:0 16px 48px rgba(20,22,26,.22);
     --s-recv-t:#0C3698; --s-recv-b:#F2F6FF; --s-recv-d:#6196FD;
     --s-rev-t:#8A5A08;  --s-rev-b:#FFF8E1;  --s-rev-d:#D99A0B;
     --s-vaw-t:#B0450D;  --s-vaw-b:#FCEBDF;  --s-vaw-d:#EA6A1C;
@@ -30,6 +34,9 @@
   body{font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
     background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; line-height:1.45;
     overflow-x:hidden; -webkit-tap-highlight-color:transparent;}
+  /* 이 앱은 숫자를 읽는 앱이다. 등폭 숫자로 자리를 맞춰야 금액이 세로로 비교된다. */
+  .mono,[class*="mono"],code,.dep-amt,.dep-meta,.dep-sum,.dep-share,.mid,.ratio-txt,
+  .attn-cnt,.tcnt,.brand-sub,.trk-lbl{font-variant-numeric:tabular-nums;}
   .wrap{max-width:620px; margin:0 auto; min-height:100%; display:flex; flex-direction:column;}
 
   header{position:sticky; top:0; z-index:20;
@@ -52,9 +59,11 @@
   .lang-toggle button.on{background:var(--ink); color:#fff;}
 
   .tabs{display:flex; gap:4px; margin-top:13px; background:var(--surface); border:1px solid var(--border-strong); border-radius:11px; padding:3px;}
-  .tabs button{flex:1; border:0; background:transparent; font:inherit; font-size:13.5px; font-weight:650; color:var(--ink-2); padding:9px; border-radius:8px; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:7px;}
-  .tabs button .tcnt{font-family:var(--mono); font-size:11px; font-weight:700; opacity:.6;}
-  .tabs button.on{background:var(--ink); color:#fff;}
+  .tabs button{flex:1; border:0; background:transparent; font:inherit; font-size:13.5px; font-weight:650; color:var(--ink-2); padding:7px; border-radius:8px; cursor:pointer; transition:all .15s; display:flex; align-items:center; justify-content:center; gap:7px;}
+  .tabs button .tcnt{font-family:var(--mono); font-size:11px; font-weight:700; opacity:.85;}
+  /* 세 단계의 선택 표현을 구분한다: 코리도(채움) > 뷰(분절) > 필터 칩(연한 강조).
+     전부 검정 알약이면 무엇이 더 중요한 선택인지가 화면에서 사라진다. */
+  .tabs button.on{background:var(--accent); color:#fff;}
 
   .search{margin-top:11px; position:relative;}
   .search svg{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted);}
@@ -67,8 +76,8 @@
   .chip{flex:none; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-2); font:inherit; font-size:12.5px; font-weight:600; padding:6px 11px; border-radius:999px; cursor:pointer; transition:all .15s; white-space:nowrap;}
   .chip .cnt{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted);}
   .chip .dot{width:7px; height:7px; border-radius:50%;}
-  .chip.on{background:var(--ink); border-color:var(--ink); color:#fff;}
-  .chip.on .cnt{color:rgba(255,255,255,.7)}
+  .chip.on{background:var(--accent-tint); border-color:var(--accent); color:var(--accent-2);}
+  .chip.on .cnt{color:var(--accent)}
 
   .toolbar{display:flex; flex-wrap:wrap; gap:7px; padding:0 0 12px;}
   .toolbar button{border:1px solid var(--border-strong); background:var(--surface); color:var(--ink-2); font:inherit; font-size:12px; font-weight:600; padding:6px 11px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:all .15s;}
@@ -95,12 +104,14 @@
   .rows-inner{padding:0 8px 8px;}
 
   .item{border-top:1px solid var(--border);}
-  .item-row{display:flex; align-items:center; gap:11px; padding:11px 8px; cursor:pointer; border-radius:10px; transition:background .12s;}
+  .item-row{display:flex; align-items:center; gap:11px; padding:10px 8px 8px; cursor:pointer; border-radius:10px; transition:background .12s;}
   .item-row:hover{background:var(--surface-2);}
   .item-row:active{background:#F1F3F6;}
   .item.attn-high .item-row{border-left:3px solid var(--s-rej-d); margin-left:-3px;}
-  .item-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;}
-  .item-name{font-size:14.5px; font-weight:600; letter-spacing:-.01em; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .item-main{flex:1; min-width:0; display:flex; flex-direction:column; gap:5px;}
+  /* 머천트 이름이 이 화면의 주인공이다("이름 치면 3초 안에"). 금액과 같은 무게로 두면
+     무엇을 먼저 읽어야 하는지가 사라진다. */
+  .item-name{font-size:15px; font-weight:650; letter-spacing:-.015em; line-height:1.33; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
   .item-sub{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
   .mid{font-family:var(--mono); font-size:10.5px; font-weight:600; color:var(--muted);}
   .bank-chip{font-size:10.5px; font-weight:650; color:var(--s-info-t,var(--accent)); background:var(--s-info-b,color-mix(in srgb, var(--accent) 12%, transparent)); padding:2px 7px; border-radius:5px;}
@@ -116,20 +127,33 @@
   .url-chip{font-size:10px; font-weight:650; color:var(--accent); background:var(--accent-tint); padding:2px 7px; border-radius:5px; text-decoration:none; white-space:nowrap; display:inline-flex; align-items:center; gap:2px;}
   .url-chip:active{background:#E1E5FB;}
 
-  .tracker{display:flex; align-items:flex-start; padding:6px 12px 10px; margin:0 4px; border-top:1px solid var(--border);}
-  .trk-step{display:flex; flex-direction:column; align-items:center; gap:4px; flex:none; min-width:38px;}
-  .trk-dot{width:10px; height:10px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface);}
+  /* 트래커는 머천트마다 한 줄을 통째로 먹는데, 승인 건은 점 4개가 모두 초록이라
+     말하는 게 없다. 정보는 그대로 두고 높이만 절반으로 줄인다. */
+  .tracker{display:flex; align-items:flex-start; padding:5px 12px 8px; margin:0 4px; border-top:1px solid var(--border);}
+  .trk-step{display:flex; flex-direction:column; align-items:center; gap:3px; flex:none; min-width:34px;}
+  .trk-dot{width:8px; height:8px; border-radius:50%; border:2px solid var(--border-strong); background:var(--surface);}
   .trk-step.done .trk-dot{background:var(--s-live-d); border-color:var(--s-live-d);}
   .trk-step.active .trk-dot{background:var(--accent); border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-tint);}
   .trk-step.fail .trk-dot{background:var(--s-rej-d); border-color:var(--s-rej-d); box-shadow:0 0 0 3px var(--s-rej-b);}
-  .trk-lbl{font-size:9px; font-weight:600; color:var(--muted); text-align:center; white-space:nowrap;}
+  .trk-lbl{font-size:9px; font-weight:600; color:var(--muted); text-align:center; white-space:nowrap; letter-spacing:-.01em;}
+  /* 접힌 행에서는 라벨을 숨긴다. 요청·KYB·심사·VA 발급은 모든 행이 똑같아서
+     행마다 반복되면 정보가 아니라 범례를 127번 인쇄하는 것이다. 점은 행마다 다르므로 남긴다. */
+  .item:not(.open) .trk-lbl{display:none;}
+  /* 폭을 좁혀 왼쪽에 붙이고 윗선을 뗀다. 전폭 레일은 행에 속한 진행 표시가 아니라
+     행과 행 사이의 구분선으로 읽혀서 목록이 토막 나 보인다. 행 구분은 .item의 border-top이 한다. */
+  .item:not(.open) .tracker{padding:0 0 10px 9px; border-top:0; width:108px;}
+  .item:not(.open) .trk-step{min-width:9px;}
+  .item:not(.open) .trk-line{min-width:6px;}
   .trk-step.done .trk-lbl{color:var(--s-live-t);}
   .trk-step.active .trk-lbl{color:var(--accent); font-weight:700;}
   .trk-step.fail .trk-lbl{color:var(--s-rej-t); font-weight:700;}
   .trk-line{flex:1; height:2px; background:var(--border); min-width:8px; margin-top:4px;}
   .trk-line.done{background:var(--s-live-d);}
   .badge{flex:none; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:650; padding:4px 9px; border-radius:999px; letter-spacing:-.01em; white-space:nowrap;}
-  .badge .bd{width:6px; height:6px; border-radius:50%;}
+  .badge .bd{width:6px; height:6px; border-radius:50%; flex:none;}
+  /* 목록용 — 칠하지 않는다. 점이 상태를 말하고 글자는 확인용이다. */
+  .badge-q{padding:2px 0; font-size:11px; font-weight:600;}
+  .badge-q .bd{width:7px; height:7px;}
 
   /* ---- 입금(deposit) ---- */
   .item-right{flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:5px;}
@@ -138,15 +162,19 @@
   .dep-meta{font-family:var(--mono); font-size:10px; color:var(--muted); white-space:nowrap;}
   .dep-badge.none .dep-amt{font-size:11.5px; font-weight:650; color:var(--s-vaw-t);}
   .item.no-dep .item-row{border-left:3px solid var(--s-vaw-d); margin-left:-3px;}
-  .dep-sum{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--ink-2);}
+  /* 그룹 합계는 그 그룹을 펼칠지 말지를 정하는 수치다. 행 금액보다 작으면 안 된다. */
+  .dep-sum{font-family:var(--mono); font-size:13px; font-weight:700; color:var(--ink); letter-spacing:-.015em;}
   .dep-warn{font-size:12px; font-weight:650; color:var(--s-vaw-t); background:var(--s-vaw-b); padding:2px 7px; border-radius:4px;}
   .chip.chip-dep.on{background:var(--s-vaw-d); border-color:var(--s-vaw-d); color:#fff;}
   .chip.chip-dep.on .cnt{color:rgba(255,255,255,.85);}
   .act-pill{flex:none; display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
     color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:6px 11px; border-radius:999px; white-space:nowrap;}
   .act-pill b{font-family:var(--mono); font-size:11.5px; color:var(--ink-2);}
-  .act-pill i{font-family:var(--mono); font-style:normal; font-size:11px; font-weight:700; color:var(--s-live-d);}
-  .dep-share{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--accent);}
+  .act-pill i{font-family:var(--mono); font-style:normal; font-size:11px; font-weight:700; color:var(--s-live-t);}
+  /* 점유율은 보조 수치다. 강조색을 주면 금액보다 먼저 읽혀 순서가 뒤집힌다.
+     강조색은 누를 수 있는 것과 지금 선택된 것에만 쓴다. */
+  .dep-share{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--muted);}
+  .d-val .dep-share{color:var(--ink-2);}
   .noonb-tag{font-size:10.5px; font-weight:650; color:var(--muted); background:var(--surface-2);
     border:1px solid var(--border); padding:1px 6px; border-radius:4px; white-space:nowrap;}
 
@@ -160,7 +188,7 @@
   .view-nav{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--border);
     border-radius:9px; padding:3px; margin:10px 0 0; overflow-x:auto; scrollbar-width:none;}
   .view-nav::-webkit-scrollbar{display:none;}
-  .view-nav button{flex:1 0 auto; font:inherit; font-size:12.5px; font-weight:650; color:var(--muted);
+  .view-nav button{flex:1 0 auto; font:inherit; font-size:12.5px; font-weight:650; color:var(--ink-2);
     background:none; border:0; padding:8px 11px; border-radius:6px; cursor:pointer; white-space:nowrap;}
   .view-nav button.on{background:var(--surface); color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.08);}
 
@@ -381,12 +409,12 @@
   .forecast{flex:1;padding:14px 16px calc(env(safe-area-inset-bottom) + 24px);}
 
   [data-theme="dark"]{
-    --bg:#0F1219; --surface:#1A1E2E; --surface-2:#222738;
-    --border:#2E3450; --border-strong:#3D4568;
-    --ink:#E2E6F3; --ink-2:#A0AACC; --muted:#6874A0;
-    --accent:#6EA8FF; --accent-2:#4B88EF; --accent-tint:#172040;
-    --shadow:0 1px 3px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
-    --shadow-lg:0 12px 40px rgba(0,0,0,.5);
+    --bg:#0D0E12; --surface:#16181F; --surface-2:#1D2029;
+    --border:#272B36; --border-strong:#353A48;
+    --ink:#E6E8EF; --ink-2:#A2A9BA; --muted:#848B9C;
+    --accent:#6E9BFF; --accent-2:#4B88EF; --accent-tint:#182135;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+    --shadow-lg:0 16px 48px rgba(0,0,0,.6);
     --s-recv-t:#8BB8FE; --s-recv-b:#172040; --s-recv-d:#6EA8FF;
     --s-rev-t:#F2CB5A;  --s-rev-b:#2C2510;  --s-rev-d:#D99A0B;
     --s-vaw-t:#F49662;  --s-vaw-b:#2C1C12;  --s-vaw-d:#EA6A1C;
@@ -396,8 +424,10 @@
     --rk1:#9CC3FF; --rk2:#7BAEFF; --rk3:#5B93F0; --rk4:#4276CC; --rk5:#2F5899; --rk-rest:#2E3450;
   }
   [data-theme="dark"] header{background:rgba(15,18,25,.92);}
-  [data-theme="dark"] .chip.on, [data-theme="dark"] .tabs button.on, [data-theme="dark"] .lang-toggle button.on, [data-theme="dark"] .view-toggle button.on{background:var(--accent); border-color:var(--accent); color:#fff;}
-  [data-theme="dark"] .chip.on .cnt{color:rgba(255,255,255,.7);}
+  [data-theme="dark"] .tabs button.on, [data-theme="dark"] .lang-toggle button.on, [data-theme="dark"] .view-toggle button.on,
+  [data-theme="dark"] .dp-mini button.on{background:#2B5CF6; border-color:#2B5CF6; color:#fff;}
+  [data-theme="dark"] .chip.on{background:var(--accent-tint); border-color:var(--accent); color:var(--accent);}
+  [data-theme="dark"] .chip.on .cnt{color:var(--accent);}
   [data-theme="dark"] .group-head:active, [data-theme="dark"] .item-row:active{background:#2A2E40;}
 </style>
 </head>
@@ -1148,7 +1178,11 @@ const openGroups = new Set();
 const openItems = new Set();
 
 /* ============================ Render ============================ */
-function statusBadge(v){ const s=statusMeta(v); return `<span class="badge" style="color:var(${s.t});background:var(${s.b})"><span class="bd" style="background:var(${s.d})"></span>${esc(s.label)}</span>`; }
+/* 목록에서는 채움 없이 점+글자로 쓴다(quiet). 127행 중 80행이 같은 상태라
+   칠해진 알약이 80번 반복되면 그건 정보가 아니라 배경이 된다.
+   상세에서는 하나뿐이라 칠해진 알약이 제 역할을 한다. */
+function statusBadge(v, quiet){ const s=statusMeta(v);
+  return `<span class="badge${quiet?" badge-q":""}" style="color:var(${s.t})${quiet?"":";background:var("+s.b+")"}"><span class="bd" style="background:var(${s.d})"></span>${esc(s.label)}</span>`; }
 
 function matchRow(r){
   if(filter==="attention"){ if(!isAttention(r)) return false; }
@@ -1284,10 +1318,15 @@ function itemHTML(r){
   const dep=dp.sum;
   const noDep=isNoDeposit(r);
   const sh = dep ? depShare(dep) : 0;
+  // 점유율·건수·최근일을 한 줄로 합친다. 각각 줄을 차지하면 오른쪽이 3줄이 되어
+  // 왼쪽(이름·MID) 2줄과 어긋나고, 그 틈이 행 한가운데 빈 공간으로 남는다.
+  const metaBits = [];
+  if(sh>=0.05) metaBits.push(`<span class="dep-share">${sh.toFixed(1)}%</span>`);
+  if(dp.cnt) metaBits.push(`${dp.cnt}${lang==="EN"?"":"건"}`);
+  if(dp.last) metaBits.push(esc(dp.last.slice(5).replace("-","/")));
   const depBadge = dep
     ? `<div class="dep-badge"><span class="dep-amt">${fmtMoney(dep)}</span>${
-         sh>=0.05?`<span class="dep-share">${sh.toFixed(1)}%</span>`:""}${
-         dp.cnt?`<span class="dep-meta">${dp.cnt}${lang==="EN"?"":"건"}${dp.last?" · "+esc(dp.last.slice(5).replace("-","/")):""}</span>`:""}</div>`
+         metaBits.length?`<span class="dep-meta">${metaBits.join(" · ")}</span>`:""}</div>`
     : noDep ? `<div class="dep-badge none"><span class="dep-amt">${L("noDeposit")}</span></div>` : "";
   return `<div class="item ${isOpen?'open':''} ${attnCls} ${noDep?'no-dep':''}" data-id="${esc(r.id)}">
     <div class="item-row" data-act="tg-item">
@@ -1303,7 +1342,7 @@ function itemHTML(r){
           ${CORR().columns.filter(c=>c.type==="url"&&r[c.field]).map(c=>{const u=r[c.field],href=/^https?:\/\//i.test(u)?u:"https://"+u; return `<a class="url-chip" href="${esc(href)}" target="_blank" rel="noopener" data-act="link">${colLabel(c)} ↗</a>`;}).join("")}
         </div>
       </div>
-      <div class="item-right">${depBadge}${r.noOnboarding?"":statusBadge(r.status)}</div>
+      <div class="item-right">${depBadge}${r.noOnboarding?"":statusBadge(r.status,true)}</div>
     </div>
     ${r.noOnboarding?"":stepTracker(r)}
     <div class="detail"><div class="detail-inner">
@@ -1467,7 +1506,7 @@ function trendHTML(){
   const mbars=ms.map(m=>`<div class="dp-bar"><span class="mo">${esc(m.mo.slice(2))}</span>
       <span class="tk">${m.m-m.nw>0?`<i style="width:${((m.m-m.nw)/mmx*100).toFixed(2)}%;background:var(--accent)"></i>`:""}${
         m.nw>0?`<i style="width:${(m.nw/mmx*100).toFixed(2)}%;background:var(--s-live-d)"></i>`:""}</span>
-      <span class="v">${m.m||"—"}${m.nw?` <span style="color:var(--s-live-d)">+${m.nw}</span>`:""}</span></div>`).join("");
+      <span class="v">${m.m||"—"}${m.nw?` <span style="color:var(--s-live-t)">+${m.nw}</span>`:""}</span></div>`).join("");
 
   const tr=ms.map(m=>`<tr><td>${esc(m.mo)}</td>
       <td class="n">${m.sum?fmtMoney(m.sum):"—"}</td>
