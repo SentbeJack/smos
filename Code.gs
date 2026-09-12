@@ -1136,7 +1136,7 @@ function pollStatusChanges() {
   });
 }
 
-/* ---- 장기 체류 알림 (일일 트리거) ----
+/* ---- 장기 체류 알림 (주간 트리거) ----
  * 같은 상태로 STALE_DAYS 이상 머문 건을 알린다.
  *
  * 반복을 막는 방식이 중요하다. 조건이 유지되는 동안 매일 보내면 같은 줄이 수십 번 오고
@@ -1230,7 +1230,7 @@ function sendStaleAlert() {
   sendSlack_({ blocks: blocks });
 }
 
-/* ---- 입금 중단 경보 (일일 트리거) ----
+/* ---- 입금 중단 경보 (주간 트리거) ----
  * 거래하던 머천트가 멈춘 것을 알린다. 승인됐는데 시작조차 안 한 건은 주간 보고가 담당한다.
  *
  * 경과일만 보면 순서가 뒤집힌다. 24일 된 ₩142억이 안 뜨고 117일 된 ₩200만이 뜬다.
@@ -1442,19 +1442,22 @@ function createSlackTriggers() {
     .inTimezone("Asia/Seoul")
     .create();
 
-  // 장기 체류는 실시간 사건이 아니므로 하루 한 번. 출근 직후에 보이도록 09:30.
+  /* 두 경보 모두 주 1회, 월요일 아침. 임계가 14·30·60일짜리 신호라 하루 단위 배달이
+   * 필요 없다. 단계 승격 억제 덕에 매일 돌려도 조용한 날이 대부분이었지만, 그 결과가
+   * 1~2건짜리 알림이 흩어지는 것이었다. 한 주에 걸쳐 넘어간 건을 모아 보내면 같은 내용이
+   * 읽히는 분량으로 온다. 대신 화요일에 넘어간 건은 다음 월요일에 알려진다.
+   * 주간 보고(09:10) 직후에 놓아 월요일 아침 한 묶음으로 읽히게 한다. */
   ScriptApp.newTrigger("sendStaleAlert")
     .timeBased()
-    .everyDays(1)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
     .atHour(9)
     .nearMinute(30)
     .inTimezone("Asia/Seoul")
     .create();
 
-  // 입금 중단도 같은 이유로 하루 한 번. 장기 체류 다음에 오도록 09:40.
   ScriptApp.newTrigger("sendQuietAlert")
     .timeBased()
-    .everyDays(1)
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
     .atHour(9)
     .nearMinute(40)
     .inTimezone("Asia/Seoul")
